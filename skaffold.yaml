@@ -1,4 +1,0 @@
-apiVersion: skaffold/v4beta1
-kind: Config
-requires:
-  - path: './infra/postgresql.skaffold.yaml'
