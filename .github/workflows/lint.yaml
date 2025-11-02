@@ -1,0 +1,30 @@
+name: Lint
+on: pull_request
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      contents: write
+      packages: read
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Configure .npmrc
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Run linters
+        uses: wearerequired/lint-action@v2
+        with:
+          auto_fix: true
+          git_no_verify: true
+          prettier: true
+          eslint: true
+          eslint_args: --max-warnings 0
+          eslint_extensions: js,jsx,ts,tsx

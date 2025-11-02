@@ -1,0 +1,26 @@
+apiVersion: skaffold/v4beta1
+kind: Config
+metadata:
+  name: postgresql
+deploy:
+  helm:
+    releases:
+      - name: postgresql
+        version: 12.1.5
+        repo: https://charts.bitnami.com/bitnami
+        remoteChart: postgresql
+        overrides:
+          image:
+            tag: 13.7.0-debian-11-r0
+          auth:
+            postgresPassword: dev
+            database: nest-starter
+          primary:
+            persistence:
+              size: 2Gi
+
+portForward:
+  - resourceType: StatefulSet
+    resourceName: postgresql
+    port: 5432
+    localPort: 5432
