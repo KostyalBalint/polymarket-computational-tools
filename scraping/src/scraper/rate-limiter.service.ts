@@ -75,4 +75,11 @@ export class RateLimiterService {
   async executeComments<T>(fn: () => Promise<T>): Promise<T> {
     return this.gammaCommentsLimiter.schedule(() => fn());
   }
+
+  /**
+   * Execute a function with rate limiting for CLOB price history endpoint
+   */
+  async executePriceHistory<T>(fn: () => Promise<T>): Promise<T> {
+    return this.clobPriceHistoryLimiter.schedule(() => fn());
+  }
 }

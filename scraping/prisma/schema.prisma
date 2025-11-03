@@ -416,8 +416,7 @@ model TokenPrice {
   timestamp DateTime // Unix timestamp converted to DateTime
   price     Float // Price at this timestamp
 
-  marketOutcomeClobTokenId String?
-  marketOutcome            MarketOutcome? @relation(fields: [marketOutcomeClobTokenId], references: [clobTokenId])
+  marketOutcome MarketOutcome? @relation(fields: [tokenId], references: [clobTokenId])
 
   @@unique([tokenId, timestamp])
   @@index([tokenId])
