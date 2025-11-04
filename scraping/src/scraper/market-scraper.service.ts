@@ -35,6 +35,8 @@ export class MarketScraperService {
     let offset = 0;
     const limit = this.config.scraper.marketsBatchSize;
     let hasMore = true;
+    let lastProgressLog = Date.now();
+    const logInterval = 10000; // Log every 10 seconds
 
     while (hasMore) {
       try {
@@ -69,6 +71,20 @@ export class MarketScraperService {
             await this.saveMarket(market);
             marketsScraped++;
             outcomesScraped += market.outcomes?.length || 0;
+
+            // Log progress periodically
+            const now = Date.now();
+            if (now - lastProgressLog > logInterval) {
+              const elapsed = (now - startTime) / 1000; // seconds
+              const rate = marketsScraped / elapsed; // markets per second
+
+              this.logger.log(
+                `Progress: ${marketsScraped.toLocaleString()} markets scraped | ` +
+                  `Rate: ${rate.toFixed(2)} markets/sec | ` +
+                  `Outcomes: ${outcomesScraped.toLocaleString()}`,
+              );
+              lastProgressLog = now;
+            }
 
             if (this.config.scraper.verboseLogging) {
               this.logger.debug(
