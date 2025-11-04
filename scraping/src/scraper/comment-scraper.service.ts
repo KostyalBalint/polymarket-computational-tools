@@ -214,6 +214,14 @@ export class CommentScraperService {
           },
         },
       },
+      // Set parent comment relationship if this is a reply
+      ...(commentData.parentCommentID && {
+        parentComment: {
+          connect: {
+            id: commentData.parentCommentID,
+          },
+        },
+      }),
     };
 
     await this.prisma.comment.upsert({
@@ -221,6 +229,34 @@ export class CommentScraperService {
       create: commentCreateInput,
       update: commentCreateInput,
     });
+
+    // Save reactions for this comment
+    if (commentData.reactions && commentData.reactions.length > 0) {
+      for (const reaction of commentData.reactions) {
+        try {
+          if (reaction.id && reaction.userAddress && reaction.reactionType) {
+            await this.prisma.commentReaction.upsert({
+              where: { id: reaction.id },
+              create: {
+                id: reaction.id,
+                reactionType: reaction.reactionType,
+                userAddress: reaction.userAddress,
+                commentID: commentData.id,
+              },
+              update: {
+                reactionType: reaction.reactionType,
+                userAddress: reaction.userAddress,
+                commentID: commentData.id,
+              },
+            });
+          }
+        } catch (error) {
+          this.logger.error(
+            `Failed to save reaction ${reaction.id} for comment ${commentData.id}: ${(error as Error).message}`,
+          );
+        }
+      }
+    }
   }
 
   /**

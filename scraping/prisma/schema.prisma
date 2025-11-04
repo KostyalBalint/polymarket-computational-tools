@@ -272,7 +272,8 @@ model Market {
 }
 
 model MarketOutcome {
-  clobTokenId String @id
+  id          Int    @id @default(autoincrement())
+  clobTokenId String @unique // Keep as unique identifier for API references
   marketId    String
 
   outcomeText String
@@ -282,6 +283,7 @@ model MarketOutcome {
   priceSnapshots TokenPrice[]
 
   @@index([marketId])
+  @@index([clobTokenId])
 }
 
 //End of MARKET TABLES
@@ -409,17 +411,17 @@ model CommentCheckpoint {
 // ============================================================================
 
 model TokenPrice {
-  id      Int    @id @default(autoincrement())
-  tokenId String // CLOB token ID from clobTokenIds
+  id               Int    @id @default(autoincrement())
+  marketOutcomeId  Int    // Foreign key to MarketOutcome
 
   // Price data from Polymarket API
   timestamp DateTime // Unix timestamp converted to DateTime
   price     Float // Price at this timestamp
 
-  marketOutcome MarketOutcome? @relation(fields: [tokenId], references: [clobTokenId])
+  marketOutcome MarketOutcome @relation(fields: [marketOutcomeId], references: [id])
 
-  @@unique([tokenId, timestamp])
-  @@index([tokenId])
+  @@unique([marketOutcomeId, timestamp])
+  @@index([marketOutcomeId])
   @@index([timestamp])
 }
 

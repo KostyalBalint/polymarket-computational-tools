@@ -55,6 +55,7 @@ export class PriceHistoryService {
       for (let skip = 0; skip < totalTokens; skip += batchSize) {
         const tokens = await this.prisma.marketOutcome.findMany({
           select: {
+            id: true,
             clobTokenId: true,
             outcomeText: true,
             marketId: true,
@@ -92,7 +93,7 @@ export class PriceHistoryService {
             // Convert API response to database format using MarketPrice[]
 
             const dbPrices = this.convertPricesToDbFormat(
-              token.clobTokenId,
+              token.id,
               priceHistory,
             );
             priceDataBatch.push(...dbPrices);
@@ -181,13 +182,13 @@ export class PriceHistoryService {
    * Convert MarketPrice array to database format
    */
   private convertPricesToDbFormat(
-    tokenId: string,
+    marketOutcomeId: number,
     prices: MarketPrice[],
   ): Array<Prisma.TokenPriceCreateManyInput> {
     return prices
       .filter((point) => point.t && point.p !== undefined)
       .map((point) => ({
-        tokenId,
+        marketOutcomeId,
         timestamp: new Date(point.t * 1000), // Convert Unix to Date
         price: point.p,
       }));
