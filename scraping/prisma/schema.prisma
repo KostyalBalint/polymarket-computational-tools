@@ -279,8 +279,10 @@ model MarketOutcome {
   outcomeText String
 
   // Relations
-  market         Market       @relation(fields: [marketId], references: [id])
-  priceSnapshots TokenPrice[]
+  market          Market       @relation(fields: [marketId], references: [id])
+  priceSnapshots  TokenPrice[]
+  pricesScrapedAt DateTime?
+  pricesCount     Int          @default(0)
 
   @@index([marketId])
   @@index([clobTokenId])
@@ -411,8 +413,8 @@ model CommentCheckpoint {
 // ============================================================================
 
 model TokenPrice {
-  id               Int    @id @default(autoincrement())
-  marketOutcomeId  Int    // Foreign key to MarketOutcome
+  id              Int @id @default(autoincrement())
+  marketOutcomeId Int // Foreign key to MarketOutcome
 
   // Price data from Polymarket API
   timestamp DateTime // Unix timestamp converted to DateTime

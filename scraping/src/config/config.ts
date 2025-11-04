@@ -33,22 +33,42 @@ export class Config {
     // Rate limiting (per 10 seconds as per Polymarket docs)
     // Gamma API: 750 req/10s general, 100 req/10s for comments/markets
     // CLOB API: Conservative default for price history
-    gammaGeneralRateLimit: get('GAMMA_GENERAL_RATE_LIMIT').default('750').asIntPositive(),
-    gammaMarketsRateLimit: get('GAMMA_MARKETS_RATE_LIMIT').default('100').asIntPositive(),
-    gammaCommentsRateLimit: get('GAMMA_COMMENTS_RATE_LIMIT').default('100').asIntPositive(),
-    clobPriceHistoryRateLimit: get('CLOB_PRICE_HISTORY_RATE_LIMIT').default('100').asIntPositive(),
+    gammaGeneralRateLimit: get('GAMMA_GENERAL_RATE_LIMIT')
+      .default('750')
+      .asIntPositive(),
+    gammaMarketsRateLimit: get('GAMMA_MARKETS_RATE_LIMIT')
+      .default('100')
+      .asIntPositive(),
+    gammaCommentsRateLimit: get('GAMMA_COMMENTS_RATE_LIMIT')
+      .default('100')
+      .asIntPositive(),
+    clobPriceHistoryRateLimit: get('CLOB_PRICE_HISTORY_RATE_LIMIT')
+      .default('100')
+      .asIntPositive(),
 
     // Concurrency settings
-    maxConcurrentMarketRequests: get('MAX_CONCURRENT_MARKET_REQUESTS').default('5').asIntPositive(),
-    maxConcurrentCommentRequests: get('MAX_CONCURRENT_COMMENT_REQUESTS').default('3').asIntPositive(),
-    maxConcurrentPriceHistoryRequests: get('MAX_CONCURRENT_PRICE_HISTORY_REQUESTS').default('5').asIntPositive(),
+    maxConcurrentMarketRequests: get('MAX_CONCURRENT_MARKET_REQUESTS')
+      .default('5')
+      .asIntPositive(),
+    maxConcurrentCommentRequests: get('MAX_CONCURRENT_COMMENT_REQUESTS')
+      .default('3')
+      .asIntPositive(),
+    maxConcurrentPriceHistoryRequests: get(
+      'MAX_CONCURRENT_PRICE_HISTORY_REQUESTS',
+    )
+      .default('10')
+      .asIntPositive(),
 
     // Price history settings
     priceHistoryInterval: get('PRICE_HISTORY_INTERVAL')
       .default('1d')
       .asEnum(['1m', '1h', '6h', '1d', '1w', 'max']),
-    priceHistoryFidelity: get('PRICE_HISTORY_FIDELITY').default('60').asIntPositive(), // minutes
-    priceHistoryLookbackDays: get('PRICE_HISTORY_LOOKBACK_DAYS').default('30').asIntPositive(),
+    priceHistoryFidelity: get('PRICE_HISTORY_FIDELITY')
+      .default('60')
+      .asIntPositive(), // minutes
+    priceHistoryLookbackDays: get('PRICE_HISTORY_LOOKBACK_DAYS')
+      .default('30')
+      .asIntPositive(),
 
     // Retry configuration
     maxRetries: get('MAX_RETRIES').default('3').asIntPositive(),

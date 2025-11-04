@@ -22,7 +22,9 @@ async function bootstrap() {
   // Scrape all command
   program
     .command('scrape:all')
-    .description('Run all scrapers (markets, comments, price history, and price snapshots)')
+    .description(
+      'Run all scrapers (markets, comments, price history, and price snapshots)',
+    )
     .action(async () => {
       const app = await NestFactory.createApplicationContext(AppModule, {
         logger: ['log', 'error', 'warn', 'debug'],
@@ -107,18 +109,24 @@ async function bootstrap() {
   program
     .command('scrape:price-history')
     .description('Scrape historical price data for all tokens from CLOB API')
-    .action(async () => {
+    .option(
+      '-r, --resume',
+      'Resume scraping from the last marketOutcome without prices',
+    )
+    .action(async (options) => {
       const app = await NestFactory.createApplicationContext(AppModule, {
         logger: ['log', 'error', 'warn', 'debug'],
       });
 
       try {
         const orchestrator = app.get(ScraperOrchestratorService);
-        await orchestrator.runPriceHistory();
+        await orchestrator.runPriceHistory(options.resume);
         await app.close();
         process.exit(0);
       } catch (error) {
-        logger.error(`Price history scraper failed: ${(error as Error).message}`);
+        logger.error(
+          `Price history scraper failed: ${(error as Error).message}`,
+        );
         await app.close();
         process.exit(1);
       }
@@ -142,9 +150,15 @@ async function bootstrap() {
         console.log('='.repeat(120));
 
         for (const run of runs) {
-          console.log(`ID: ${run.id} | Type: ${run.runType.padEnd(15)} | Status: ${run.status.padEnd(10)} | Duration: ${run.durationMs || 0}ms`);
-          console.log(`  Markets: ${run.marketsScraped} | Comments: ${run.commentsScraped} | Snapshots: ${run.priceSnapshotsTaken}`);
-          console.log(`  Tokens: ${run.tokensProcessed} | Price Data Points: ${run.priceDataPointsStored}`);
+          console.log(
+            `ID: ${run.id} | Type: ${run.runType.padEnd(15)} | Status: ${run.status.padEnd(10)} | Duration: ${run.durationMs || 0}ms`,
+          );
+          console.log(
+            `  Markets: ${run.marketsScraped} | Comments: ${run.commentsScraped} | Snapshots: ${run.priceSnapshotsTaken}`,
+          );
+          console.log(
+            `  Tokens: ${run.tokensProcessed} | Price Data Points: ${run.priceDataPointsStored}`,
+          );
           console.log(`  Started: ${run.startTime.toISOString()}`);
           if (run.errorCount > 0) {
             console.log(`  Errors: ${run.errorCount}`);

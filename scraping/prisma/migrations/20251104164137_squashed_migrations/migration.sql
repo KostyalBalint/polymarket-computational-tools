@@ -174,11 +174,14 @@ CREATE TABLE "Market" (
 
 -- CreateTable
 CREATE TABLE "MarketOutcome" (
+    "id" SERIAL NOT NULL,
     "clobTokenId" TEXT NOT NULL,
     "marketId" TEXT NOT NULL,
     "outcomeText" TEXT NOT NULL,
+    "pricesScrapedAt" TIMESTAMP(3),
+    "pricesCount" INTEGER NOT NULL DEFAULT 0,
 
-    CONSTRAINT "MarketOutcome_pkey" PRIMARY KEY ("clobTokenId")
+    CONSTRAINT "MarketOutcome_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -206,23 +209,26 @@ CREATE TABLE "Comment" (
     "body" TEXT NOT NULL,
     "userAddress" TEXT NOT NULL,
     "replyAddress" TEXT,
-    "userName" TEXT,
-    "userPseudonym" TEXT,
-    "userIsMod" BOOLEAN NOT NULL DEFAULT false,
-    "userIsCreator" BOOLEAN NOT NULL DEFAULT false,
-    "userProfileImage" TEXT,
     "parentEntityType" TEXT NOT NULL,
-    "parentEntityId" TEXT NOT NULL,
-    "marketId" TEXT,
-    "parentCommentId" TEXT,
-    "reactionToCommentId" TEXT,
+    "parentEntityID" TEXT NOT NULL,
     "reactionCount" INTEGER NOT NULL DEFAULT 0,
     "reportCount" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3),
     "updatedAt" TIMESTAMP(3),
     "scrapedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "parentCommentID" TEXT,
 
     CONSTRAINT "Comment_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CommentReaction" (
+    "id" TEXT NOT NULL,
+    "reactionType" TEXT NOT NULL,
+    "userAddress" TEXT NOT NULL,
+    "commentID" TEXT NOT NULL,
+
+    CONSTRAINT "CommentReaction_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -244,7 +250,7 @@ CREATE TABLE "UserProfile" (
 -- CreateTable
 CREATE TABLE "CommentCheckpoint" (
     "id" SERIAL NOT NULL,
-    "marketId" TEXT NOT NULL,
+    "eventId" TEXT NOT NULL,
     "lastOffset" INTEGER NOT NULL DEFAULT 0,
     "totalFetched" INTEGER NOT NULL DEFAULT 0,
     "lastScrapedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -255,10 +261,9 @@ CREATE TABLE "CommentCheckpoint" (
 -- CreateTable
 CREATE TABLE "TokenPrice" (
     "id" SERIAL NOT NULL,
-    "tokenId" TEXT NOT NULL,
+    "marketOutcomeId" INTEGER NOT NULL,
     "timestamp" TIMESTAMP(3) NOT NULL,
     "price" DOUBLE PRECISION NOT NULL,
-    "marketOutcomeClobTokenId" TEXT,
 
     CONSTRAINT "TokenPrice_pkey" PRIMARY KEY ("id")
 );
@@ -341,7 +346,13 @@ CREATE INDEX "Market_slug_idx" ON "Market"("slug");
 CREATE INDEX "Market_active_idx" ON "Market"("active");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "MarketOutcome_clobTokenId_key" ON "MarketOutcome"("clobTokenId");
+
+-- CreateIndex
 CREATE INDEX "MarketOutcome_marketId_idx" ON "MarketOutcome"("marketId");
+
+-- CreateIndex
+CREATE INDEX "MarketOutcome_clobTokenId_idx" ON "MarketOutcome"("clobTokenId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Tag_slug_key" ON "Tag"("slug");
@@ -350,37 +361,31 @@ CREATE UNIQUE INDEX "Tag_slug_key" ON "Tag"("slug");
 CREATE INDEX "Tag_slug_idx" ON "Tag"("slug");
 
 -- CreateIndex
-CREATE INDEX "Comment_marketId_idx" ON "Comment"("marketId");
-
--- CreateIndex
 CREATE INDEX "Comment_userAddress_idx" ON "Comment"("userAddress");
 
 -- CreateIndex
-CREATE INDEX "Comment_parentEntityType_parentEntityId_idx" ON "Comment"("parentEntityType", "parentEntityId");
+CREATE INDEX "Comment_parentEntityType_parentEntityID_idx" ON "Comment"("parentEntityType", "parentEntityID");
 
 -- CreateIndex
-CREATE INDEX "Comment_parentCommentId_idx" ON "Comment"("parentCommentId");
-
--- CreateIndex
-CREATE INDEX "Comment_reactionToCommentId_idx" ON "Comment"("reactionToCommentId");
+CREATE INDEX "Comment_parentCommentID_idx" ON "Comment"("parentCommentID");
 
 -- CreateIndex
 CREATE INDEX "Comment_createdAt_idx" ON "Comment"("createdAt");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "CommentCheckpoint_marketId_key" ON "CommentCheckpoint"("marketId");
+CREATE UNIQUE INDEX "CommentCheckpoint_eventId_key" ON "CommentCheckpoint"("eventId");
 
 -- CreateIndex
 CREATE INDEX "CommentCheckpoint_lastScrapedAt_idx" ON "CommentCheckpoint"("lastScrapedAt");
 
 -- CreateIndex
-CREATE INDEX "TokenPrice_tokenId_idx" ON "TokenPrice"("tokenId");
+CREATE INDEX "TokenPrice_marketOutcomeId_idx" ON "TokenPrice"("marketOutcomeId");
 
 -- CreateIndex
 CREATE INDEX "TokenPrice_timestamp_idx" ON "TokenPrice"("timestamp");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "TokenPrice_tokenId_timestamp_key" ON "TokenPrice"("tokenId", "timestamp");
+CREATE UNIQUE INDEX "TokenPrice_marketOutcomeId_timestamp_key" ON "TokenPrice"("marketOutcomeId", "timestamp");
 
 -- CreateIndex
 CREATE INDEX "ScraperRun_runType_idx" ON "ScraperRun"("runType");
@@ -401,25 +406,25 @@ CREATE INDEX "_EventToTag_B_index" ON "_EventToTag"("B");
 CREATE INDEX "_MarketToTag_B_index" ON "_MarketToTag"("B");
 
 -- AddForeignKey
-ALTER TABLE "MarketOutcome" ADD CONSTRAINT "MarketOutcome_marketId_fkey" FOREIGN KEY ("marketId") REFERENCES "Market"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "MarketOutcome" ADD CONSTRAINT "MarketOutcome_marketId_fkey" FOREIGN KEY ("marketId") REFERENCES "Market"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Comment" ADD CONSTRAINT "Comment_userAddress_fkey" FOREIGN KEY ("userAddress") REFERENCES "UserProfile"("address") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Comment" ADD CONSTRAINT "Comment_userAddress_fkey" FOREIGN KEY ("userAddress") REFERENCES "UserProfile"("address") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Comment" ADD CONSTRAINT "Comment_marketId_fkey" FOREIGN KEY ("marketId") REFERENCES "Market"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Comment" ADD CONSTRAINT "Comment_parentEntityID_fkey" FOREIGN KEY ("parentEntityID") REFERENCES "Event"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Comment" ADD CONSTRAINT "Comment_parentCommentId_fkey" FOREIGN KEY ("parentCommentId") REFERENCES "Comment"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Comment" ADD CONSTRAINT "Comment_parentCommentID_fkey" FOREIGN KEY ("parentCommentID") REFERENCES "Comment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Comment" ADD CONSTRAINT "Comment_reactionToCommentId_fkey" FOREIGN KEY ("reactionToCommentId") REFERENCES "Comment"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "CommentReaction" ADD CONSTRAINT "CommentReaction_commentID_fkey" FOREIGN KEY ("commentID") REFERENCES "Comment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "CommentCheckpoint" ADD CONSTRAINT "CommentCheckpoint_marketId_fkey" FOREIGN KEY ("marketId") REFERENCES "Market"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "CommentCheckpoint" ADD CONSTRAINT "CommentCheckpoint_eventId_fkey" FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "TokenPrice" ADD CONSTRAINT "TokenPrice_marketOutcomeClobTokenId_fkey" FOREIGN KEY ("marketOutcomeClobTokenId") REFERENCES "MarketOutcome"("clobTokenId") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "TokenPrice" ADD CONSTRAINT "TokenPrice_marketOutcomeId_fkey" FOREIGN KEY ("marketOutcomeId") REFERENCES "MarketOutcome"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "_EventToMarket" ADD CONSTRAINT "_EventToMarket_A_fkey" FOREIGN KEY ("A") REFERENCES "Event"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -23,24 +23,45 @@ export class PriceHistoryService {
   // TOKEN PRICE HISTORY
   // ============================================================================
 
-  async scrapeAllTokenPriceHistory(): Promise<{
+  async scrapeAllTokenPriceHistory(resume: boolean = false): Promise<{
     tokensProcessed: number;
     dataPointsStored: number;
     errors: string[];
   }> {
     const startTime = Date.now();
-    this.logger.log('Starting price history scraping...');
+    this.logger.log(
+      `Starting price history scraping${resume ? ' (resume mode)' : ''}...`,
+    );
 
     let tokensProcessed = 0;
     let dataPointsStored = 0;
     const errors: string[] = [];
 
     try {
-      // Get all MarketOutcomes ordered by most recent markets
+      // Build where clause for resume mode - use pricesScrapedAt field
+      const whereClause: Prisma.MarketOutcomeWhereInput = resume
+        ? {
+            pricesScrapedAt: null,
+          }
+        : {};
+
+      // Get total count
       const totalTokens = await this.prisma.marketOutcome.count();
-      this.logger.log(
-        `Found ${totalTokens.toLocaleString()} tokens to process`,
-      );
+      const tokensToProcess = await this.prisma.marketOutcome.count({
+        where: whereClause,
+      });
+
+      if (resume) {
+        const alreadyProcessed = totalTokens - tokensToProcess;
+        this.logger.log(
+          `Resume mode: ${alreadyProcessed.toLocaleString()} tokens already processed, ` +
+            `${tokensToProcess.toLocaleString()} tokens remaining`,
+        );
+      } else {
+        this.logger.log(
+          `Found ${tokensToProcess.toLocaleString()} tokens to process`,
+        );
+      }
 
       // Fetch tokens in batches to avoid memory issues
       const batchSize = 1000;
@@ -50,10 +71,16 @@ export class PriceHistoryService {
 
       // Collect prices for batch insertion
       const priceDataBatch: Array<Prisma.TokenPriceCreateManyInput> = [];
+      // Track marketOutcome updates to batch with price inserts
+      const marketOutcomeUpdates: Array<{
+        id: number;
+        pricesCount: number;
+      }> = [];
 
-      // Process in batches
-      for (let skip = 0; skip < totalTokens; skip += batchSize) {
+      // Process in batches - only fetch tokens without prices
+      for (let skip = 0; skip < tokensToProcess; skip += batchSize) {
         const tokens = await this.prisma.marketOutcome.findMany({
+          where: whereClause,
           select: {
             id: true,
             clobTokenId: true,
@@ -98,6 +125,12 @@ export class PriceHistoryService {
             );
             priceDataBatch.push(...dbPrices);
 
+            // Track this marketOutcome for metadata update
+            marketOutcomeUpdates.push({
+              id: token.id,
+              pricesCount: dbPrices.length,
+            });
+
             tokensProcessed++;
             processedCount++;
 
@@ -106,12 +139,13 @@ export class PriceHistoryService {
             if (now - lastProgressLog > logInterval) {
               const elapsed = now - startTime;
               const rate = processedCount / (elapsed / 1000); // tokens per second
-              const remaining = totalTokens - processedCount;
-              const estimatedTimeMs = (remaining / rate) * 1000;
+              const remaining = tokensToProcess - processedCount;
+              const estimatedTimeMs =
+                remaining > 0 && rate > 0 ? (remaining / rate) * 1000 : 0;
 
               this.logger.log(
-                `Progress: ${processedCount.toLocaleString()}/${totalTokens.toLocaleString()} tokens ` +
-                  `(${((processedCount / totalTokens) * 100).toFixed(1)}%) | ` +
+                `Progress: ${processedCount.toLocaleString()}/${tokensToProcess.toLocaleString()} tokens ` +
+                  `(${((processedCount / tokensToProcess) * 100).toFixed(1)}%) | ` +
                   `Rate: ${rate.toFixed(2)} tokens/sec | ` +
                   `ETA: ${this.formatDuration(estimatedTimeMs)} | ` +
                   `Batch size: ${priceDataBatch.length.toLocaleString()} data points pending`,
@@ -119,16 +153,18 @@ export class PriceHistoryService {
               lastProgressLog = now;
             }
 
-            // Batch insert when batch reaches a good size (every 100 tokens or ~10K data points)
-            if (priceDataBatch.length >= 10000 || processedCount % 100 === 0) {
-              const inserted = await this.batchInsertPrices(priceDataBatch);
+            // Batch insert when batch reaches a good size (50K data points or every 500 tokens)
+            if (priceDataBatch.length >= 50000 || processedCount % 500 === 0) {
+              const inserted = await this.batchInsertPricesWithMetadata(
+                priceDataBatch,
+                marketOutcomeUpdates,
+              );
               dataPointsStored += inserted;
               priceDataBatch.length = 0; // Clear the batch
+              marketOutcomeUpdates.length = 0; // Clear the updates
 
               if (this.config.scraper.verboseLogging) {
-                this.logger.debug(
-                  `Batch inserted ${inserted.toLocaleString()} data points`,
-                );
+                this.logger.debug(`Batch inserted ${inserted} data points`);
               }
             }
           } catch (error) {
@@ -147,10 +183,14 @@ export class PriceHistoryService {
         }
 
         // Insert remaining prices from this batch
-        if (priceDataBatch.length > 0) {
-          const inserted = await this.batchInsertPrices(priceDataBatch);
+        if (priceDataBatch.length > 0 || marketOutcomeUpdates.length > 0) {
+          const inserted = await this.batchInsertPricesWithMetadata(
+            priceDataBatch,
+            marketOutcomeUpdates,
+          );
           dataPointsStored += inserted;
           priceDataBatch.length = 0;
+          marketOutcomeUpdates.length = 0;
         }
       }
     } catch (error) {
@@ -195,8 +235,68 @@ export class PriceHistoryService {
   }
 
   /**
+   * Batch insert price data and update marketOutcome metadata in a transaction
+   * Uses createMany with skipDuplicates to avoid conflicts on unique constraint
+   */
+  private async batchInsertPricesWithMetadata(
+    prices: Array<Prisma.TokenPriceCreateManyInput>,
+    marketOutcomeUpdates: Array<{ id: number; pricesCount: number }>,
+  ): Promise<number> {
+    if (prices.length === 0 && marketOutcomeUpdates.length === 0) return 0;
+
+    try {
+      const scrapedAt = new Date();
+
+      // Use transaction to ensure consistency
+      const result = await this.prisma.$transaction(async (tx) => {
+        // Insert prices
+        let insertedCount = 0;
+        if (prices.length > 0) {
+          const priceResult = await tx.tokenPrice.createMany({
+            data: prices,
+            skipDuplicates: true,
+          });
+          insertedCount = priceResult.count;
+        }
+
+        // Update marketOutcome metadata
+        if (marketOutcomeUpdates.length > 0) {
+          await Promise.all(
+            marketOutcomeUpdates.map((update) =>
+              tx.marketOutcome.update({
+                where: { id: update.id },
+                data: {
+                  pricesScrapedAt: scrapedAt,
+                  pricesCount: update.pricesCount,
+                },
+              }),
+            ),
+          );
+        }
+
+        return insertedCount;
+      });
+
+      if (result === 0 && prices.length > 0) {
+        this.logger.warn(
+          `Attempted to insert ${prices.length} data points but 0 were inserted (all duplicates). ` +
+            `Updated ${marketOutcomeUpdates.length} marketOutcome records with metadata.`,
+        );
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Failed to batch insert ${prices.length} prices and update ${marketOutcomeUpdates.length} marketOutcomes: ${(error as Error).message}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
    * Batch insert price data into database efficiently
    * Uses createMany with skipDuplicates to avoid conflicts on unique constraint
+   * @deprecated Use batchInsertPricesWithMetadata instead
    */
   private async batchInsertPrices(
     prices: Array<Prisma.TokenPriceCreateManyInput>,
@@ -208,6 +308,13 @@ export class PriceHistoryService {
         data: prices,
         skipDuplicates: true,
       });
+
+      if (result.count === 0 && prices.length > 0) {
+        this.logger.warn(
+          `Attempted to insert ${prices.length} data points but 0 were inserted (all duplicates). ` +
+            `Sample marketOutcomeId: ${prices[0].marketOutcomeId}`,
+        );
+      }
 
       return result.count;
     } catch (error) {

@@ -161,12 +161,14 @@ export class ScraperOrchestratorService {
   /**
    * Run only token price history scraper
    */
-  async runPriceHistory(): Promise<void> {
-    this.logger.log('Starting token price history scraper...');
+  async runPriceHistory(resume: boolean = false): Promise<void> {
+    this.logger.log(
+      `Starting token price history scraper${resume ? ' (resume mode)' : ''}...`,
+    );
     const runRecord = await this.createScraperRun('price-history');
 
     try {
-      const result = await this.priceHistory.scrapeAllTokenPriceHistory();
+      const result = await this.priceHistory.scrapeAllTokenPriceHistory(resume);
       await this.updateScraperRun(runRecord.id, {
         tokensProcessed: result.tokensProcessed,
         priceDataPointsStored: result.dataPointsStored,
