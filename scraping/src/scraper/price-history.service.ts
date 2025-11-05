@@ -247,16 +247,20 @@ export class PriceHistoryService {
     try {
       const scrapedAt = new Date();
 
-      // Use transaction to ensure consistency
+      // Use transaction to ensure consistency with increased timeout and chunking for large batches
+      const CHUNK_SIZE = 10000; // Split large batches into smaller chunks
       const result = await this.prisma.$transaction(async (tx) => {
-        // Insert prices
+        // Insert prices in chunks to avoid timeout
         let insertedCount = 0;
         if (prices.length > 0) {
-          const priceResult = await tx.tokenPrice.createMany({
-            data: prices,
-            skipDuplicates: true,
-          });
-          insertedCount = priceResult.count;
+          for (let i = 0; i < prices.length; i += CHUNK_SIZE) {
+            const chunk = prices.slice(i, i + CHUNK_SIZE);
+            const priceResult = await tx.tokenPrice.createMany({
+              data: chunk,
+              skipDuplicates: true,
+            });
+            insertedCount += priceResult.count;
+          }
         }
 
         // Update marketOutcome metadata
@@ -275,6 +279,9 @@ export class PriceHistoryService {
         }
 
         return insertedCount;
+      }, {
+        maxWait: 30000, // Maximum time to wait for transaction to start (30s)
+        timeout: 60000, // Maximum time for transaction to complete (60s)
       });
 
       if (result === 0 && prices.length > 0) {
