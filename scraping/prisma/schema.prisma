@@ -384,11 +384,13 @@ model UserProfile {
   bio                   String?
   isMod                 Boolean @default(false)
   isCreator             Boolean @default(false)
-  proxyWallet           String?
+  proxyWallet           String? @unique
   baseAddress           String?
   profileImage          String?
 
-  Comment Comment[]
+  Comment      Comment[]
+  UserPosition UserPosition[]
+  UserTrade    UserTrade[]
 }
 
 model CommentCheckpoint {
@@ -428,6 +430,90 @@ model TokenPrice {
 }
 
 // ============================================================================
+// USER POSITIONS AND TRADES TABLES
+// ============================================================================
+
+model UserPosition {
+  id          Int    @id @default(autoincrement())
+  proxyWallet String
+  asset       String
+  conditionId String
+
+  // Position metrics
+  size               Float
+  avgPrice           Float
+  initialValue       Float
+  currentValue       Float
+  cashPnl            Float
+  percentPnl         Float
+  totalBought        Float
+  realizedPnl        Float
+  percentRealizedPnl Float
+  curPrice           Float
+
+  // Status
+  redeemable   Boolean
+  mergeable    Boolean
+  negativeRisk Boolean
+
+  // Market info
+  title           String
+  slug            String
+  icon            String?
+  eventSlug       String
+  outcome         String
+  outcomeIndex    Int
+  oppositeOutcome String
+  oppositeAsset   String
+  endDate         String
+
+  // Scraper metadata
+  scrapedAt   DateTime @default(now()) @updatedAt
+  createdInDb DateTime @default(now())
+
+  // Relations
+  userProfile UserProfile @relation(fields: [proxyWallet], references: [proxyWallet])
+
+  @@index([proxyWallet])
+  @@index([conditionId])
+  @@index([scrapedAt])
+}
+
+model UserTrade {
+  id          Int    @id @default(autoincrement())
+  proxyWallet String
+  side        String // 'BUY' or 'SELL'
+  asset       String
+  conditionId String
+
+  // Trade details
+  size            Float
+  price           Float
+  timestamp       DateTime
+  transactionHash String   @unique
+
+  // Market info
+  title        String
+  slug         String
+  icon         String?
+  eventSlug    String
+  outcome      String
+  outcomeIndex Int
+
+  // Scraper metadata
+  scrapedAt   DateTime @default(now())
+  createdInDb DateTime @default(now())
+
+  // Relations
+  userProfile UserProfile @relation(fields: [proxyWallet], references: [proxyWallet])
+
+  @@index([proxyWallet])
+  @@index([conditionId])
+  @@index([timestamp])
+  @@index([transactionHash])
+}
+
+// ============================================================================
 // SCRAPER METADATA TABLES
 // ============================================================================
 
@@ -435,7 +521,7 @@ model ScraperRun {
   id Int @id @default(autoincrement())
 
   // Run metadata
-  runType String // "markets", "comments", "prices", "price-history", "all"
+  runType String // "markets", "comments", "prices", "price-history", "user-positions", "user-trades", "all"
   status  String @default("running") // "running", "completed", "failed"
 
   // Statistics
@@ -445,6 +531,9 @@ model ScraperRun {
   priceSnapshotsTaken   Int @default(0)
   tokensProcessed       Int @default(0)
   priceDataPointsStored Int @default(0)
+  userPositionsScraped  Int @default(0)
+  userTradesScraped     Int @default(0)
+  usersProcessed        Int @default(0)
 
   // Error tracking
   errors     String? @db.Text

@@ -132,6 +132,52 @@ async function bootstrap() {
       }
     });
 
+  // Scrape user positions command
+  program
+    .command('scrape:user-positions')
+    .description('Scrape current positions for all users in UserProfile table')
+    .action(async () => {
+      const app = await NestFactory.createApplicationContext(AppModule, {
+        logger: ['log', 'error', 'warn', 'debug'],
+      });
+
+      try {
+        const orchestrator = app.get(ScraperOrchestratorService);
+        await orchestrator.runUserPositions();
+        await app.close();
+        process.exit(0);
+      } catch (error) {
+        logger.error(
+          `User positions scraper failed: ${(error as Error).message}`,
+        );
+        await app.close();
+        process.exit(1);
+      }
+    });
+
+  // Scrape user trades command
+  program
+    .command('scrape:user-trades')
+    .description('Scrape historical trades for all users in UserProfile table')
+    .action(async () => {
+      const app = await NestFactory.createApplicationContext(AppModule, {
+        logger: ['log', 'error', 'warn', 'debug'],
+      });
+
+      try {
+        const orchestrator = app.get(ScraperOrchestratorService);
+        await orchestrator.runUserTrades();
+        await app.close();
+        process.exit(0);
+      } catch (error) {
+        logger.error(
+          `User trades scraper failed: ${(error as Error).message}`,
+        );
+        await app.close();
+        process.exit(1);
+      }
+    });
+
   // Show recent runs
   program
     .command('runs')
@@ -158,6 +204,9 @@ async function bootstrap() {
           );
           console.log(
             `  Tokens: ${run.tokensProcessed} | Price Data Points: ${run.priceDataPointsStored}`,
+          );
+          console.log(
+            `  Users: ${run.usersProcessed} | Positions: ${run.userPositionsScraped} | Trades: ${run.userTradesScraped}`,
           );
           console.log(`  Started: ${run.startTime.toISOString()}`);
           if (run.errorCount > 0) {

@@ -10,6 +10,8 @@ import { Config } from '../config/config';
  * - Gamma Markets: 100 req/10s
  * - Gamma Comments: 100 req/10s
  * - CLOB API price history: Conservative default 100 req/10s
+ * - Data API positions: Conservative default 100 req/10s
+ * - Data API trades: Conservative default 100 req/10s
  */
 @Injectable()
 export class RateLimiterService {
@@ -18,6 +20,8 @@ export class RateLimiterService {
   private readonly gammaMarketsLimiter: Bottleneck;
   private readonly gammaCommentsLimiter: Bottleneck;
   private readonly clobPriceHistoryLimiter: Bottleneck;
+  private readonly dataPositionsLimiter: Bottleneck;
+  private readonly dataTradesLimiter: Bottleneck;
 
   constructor(private readonly config: Config) {
     // Gamma Markets rate limiter (100 req/10s)
@@ -47,6 +51,24 @@ export class RateLimiterService {
       minTime: 0,
     });
 
+    // Data API Positions rate limiter (100 req/10s default)
+    this.dataPositionsLimiter = new Bottleneck({
+      reservoir: config.scraper.dataPositionsRateLimit,
+      reservoirRefreshAmount: config.scraper.dataPositionsRateLimit,
+      reservoirRefreshInterval: 10 * 1000,
+      maxConcurrent: 5, // Conservative concurrent limit
+      minTime: 0,
+    });
+
+    // Data API Trades rate limiter (100 req/10s default)
+    this.dataTradesLimiter = new Bottleneck({
+      reservoir: config.scraper.dataTradesRateLimit,
+      reservoirRefreshAmount: config.scraper.dataTradesRateLimit,
+      reservoirRefreshInterval: 10 * 1000,
+      maxConcurrent: 5, // Conservative concurrent limit
+      minTime: 0,
+    });
+
     this.logger.log('Rate limiters initialized');
     this.logger.log(
       `- Gamma general: ${config.scraper.gammaGeneralRateLimit} req/10s`,
@@ -59,6 +81,12 @@ export class RateLimiterService {
     );
     this.logger.log(
       `- CLOB price history: ${config.scraper.clobPriceHistoryRateLimit} req/10s`,
+    );
+    this.logger.log(
+      `- Data positions: ${config.scraper.dataPositionsRateLimit} req/10s`,
+    );
+    this.logger.log(
+      `- Data trades: ${config.scraper.dataTradesRateLimit} req/10s`,
     );
   }
 
@@ -81,5 +109,19 @@ export class RateLimiterService {
    */
   async executePriceHistory<T>(fn: () => Promise<T>): Promise<T> {
     return this.clobPriceHistoryLimiter.schedule(() => fn());
+  }
+
+  /**
+   * Execute a function with rate limiting for Data API positions endpoint
+   */
+  async executePositions<T>(fn: () => Promise<T>): Promise<T> {
+    return this.dataPositionsLimiter.schedule(() => fn());
+  }
+
+  /**
+   * Execute a function with rate limiting for Data API trades endpoint
+   */
+  async executeTrades<T>(fn: () => Promise<T>): Promise<T> {
+    return this.dataTradesLimiter.schedule(() => fn());
   }
 }

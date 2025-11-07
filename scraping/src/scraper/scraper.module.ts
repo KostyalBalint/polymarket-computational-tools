@@ -4,8 +4,12 @@ import { RateLimiterService } from './rate-limiter.service';
 import { MarketScraperService } from './market-scraper.service';
 import { CommentScraperService } from './comment-scraper.service';
 import { PriceHistoryService } from './price-history.service';
+import { UserPositionsScraperService } from './user-positions-scraper.service';
+import { UserTradesScraperService } from './user-trades-scraper.service';
 import { ScraperOrchestratorService } from './scraper-orchestrator.service';
 import { PrismaService } from '../prisma/PrismaService';
+import { ConfigModule } from '../config/config.module';
+import { Config } from '../config/config';
 
 @Module({
   providers: [
@@ -14,6 +18,8 @@ import { PrismaService } from '../prisma/PrismaService';
     MarketScraperService,
     CommentScraperService,
     PriceHistoryService,
+    UserPositionsScraperService,
+    UserTradesScraperService,
     ScraperOrchestratorService,
     PrismaService,
   ],
@@ -22,6 +28,8 @@ import { PrismaService } from '../prisma/PrismaService';
     MarketScraperService,
     CommentScraperService,
     PriceHistoryService,
+    UserPositionsScraperService,
+    UserTradesScraperService,
   ],
 })
 export class ScraperModule {}

@@ -33,6 +33,7 @@ export class Config {
     // Rate limiting (per 10 seconds as per Polymarket docs)
     // Gamma API: 750 req/10s general, 100 req/10s for comments/markets
     // CLOB API: Conservative default for price history
+    // Data API: Conservative defaults for user positions/trades
     gammaGeneralRateLimit: get('GAMMA_GENERAL_RATE_LIMIT')
       .default('750')
       .asIntPositive(),
@@ -44,6 +45,12 @@ export class Config {
       .asIntPositive(),
     clobPriceHistoryRateLimit: get('CLOB_PRICE_HISTORY_RATE_LIMIT')
       .default('100')
+      .asIntPositive(),
+    dataPositionsRateLimit: get('DATA_POSITIONS_RATE_LIMIT')
+      .default('90')
+      .asIntPositive(),
+    dataTradesRateLimit: get('DATA_TRADES_RATE_LIMIT')
+      .default('90')
       .asIntPositive(),
 
     // Concurrency settings

@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { MarketScraperService } from './market-scraper.service';
 import { CommentScraperService } from './comment-scraper.service';
 import { PriceHistoryService } from './price-history.service';
+import { UserPositionsScraperService } from './user-positions-scraper.service';
+import { UserTradesScraperService } from './user-trades-scraper.service';
 import { PrismaService } from '../prisma/PrismaService';
 
 export type ScraperRunType =
@@ -9,6 +11,8 @@ export type ScraperRunType =
   | 'comments'
   | 'prices'
   | 'price-history'
+  | 'user-positions'
+  | 'user-trades'
   | 'all';
 
 @Injectable()
@@ -19,6 +23,8 @@ export class ScraperOrchestratorService {
     private readonly marketScraper: MarketScraperService,
     private readonly commentScraper: CommentScraperService,
     private readonly priceHistory: PriceHistoryService,
+    private readonly userPositionsScraper: UserPositionsScraperService,
+    private readonly userTradesScraper: UserTradesScraperService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -187,6 +193,58 @@ export class ScraperOrchestratorService {
   }
 
   /**
+   * Run only user positions scraper
+   */
+  async runUserPositions(): Promise<void> {
+    this.logger.log('Starting user positions scraper...');
+    const runRecord = await this.createScraperRun('user-positions');
+
+    try {
+      const result = await this.userPositionsScraper.scrapeAllUserPositions();
+      await this.updateScraperRun(runRecord.id, {
+        usersProcessed: result.usersProcessed,
+        userPositionsScraped: result.positionsScraped,
+        errors: result.errors,
+      });
+      await this.completeScraperRun(runRecord.id, 'completed');
+      this.logger.log('User positions scraper completed successfully!');
+      this.printSummary(runRecord.id);
+    } catch (error) {
+      await this.completeScraperRun(runRecord.id, 'failed');
+      this.logger.error(
+        `User positions scraper failed: ${(error as Error).message}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Run only user trades scraper
+   */
+  async runUserTrades(): Promise<void> {
+    this.logger.log('Starting user trades scraper...');
+    const runRecord = await this.createScraperRun('user-trades');
+
+    try {
+      const result = await this.userTradesScraper.scrapeAllUserTrades();
+      await this.updateScraperRun(runRecord.id, {
+        usersProcessed: result.usersProcessed,
+        userTradesScraped: result.tradesScraped,
+        errors: result.errors,
+      });
+      await this.completeScraperRun(runRecord.id, 'completed');
+      this.logger.log('User trades scraper completed successfully!');
+      this.printSummary(runRecord.id);
+    } catch (error) {
+      await this.completeScraperRun(runRecord.id, 'failed');
+      this.logger.error(
+        `User trades scraper failed: ${(error as Error).message}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
    * Create a scraper run record
    */
   private async createScraperRun(runType: ScraperRunType): Promise<any> {
@@ -211,6 +269,9 @@ export class ScraperOrchestratorService {
       priceSnapshotsTaken?: number;
       tokensProcessed?: number;
       priceDataPointsStored?: number;
+      userPositionsScraped?: number;
+      userTradesScraped?: number;
+      usersProcessed?: number;
       errors?: string[];
     },
   ): Promise<void> {
@@ -233,6 +294,15 @@ export class ScraperOrchestratorService {
     }
     if (data.priceDataPointsStored !== undefined) {
       updateData.priceDataPointsStored = data.priceDataPointsStored;
+    }
+    if (data.userPositionsScraped !== undefined) {
+      updateData.userPositionsScraped = data.userPositionsScraped;
+    }
+    if (data.userTradesScraped !== undefined) {
+      updateData.userTradesScraped = data.userTradesScraped;
+    }
+    if (data.usersProcessed !== undefined) {
+      updateData.usersProcessed = data.usersProcessed;
     }
     if (data.errors && data.errors.length > 0) {
       updateData.errors = data.errors.join('\n');
@@ -294,6 +364,9 @@ export class ScraperOrchestratorService {
     this.logger.log(`Price snapshots taken: ${run.priceSnapshotsTaken}`);
     this.logger.log(`Tokens processed: ${run.tokensProcessed}`);
     this.logger.log(`Price data points stored: ${run.priceDataPointsStored}`);
+    this.logger.log(`Users processed: ${run.usersProcessed}`);
+    this.logger.log(`User positions scraped: ${run.userPositionsScraped}`);
+    this.logger.log(`User trades scraped: ${run.userTradesScraped}`);
     if (run.errorCount > 0) {
       this.logger.log(`Errors: ${run.errorCount}`);
     }

@@ -27,6 +27,8 @@
     "scrape:comments": "ts-node src/cli.ts scrape:comments",
     "scrape:prices": "ts-node src/cli.ts scrape:prices",
     "scrape:price-history": "ts-node src/cli.ts scrape:price-history",
+    "scrape:user-positions": "ts-node src/cli.ts scrape:user-positions",
+    "scrape:user-trades": "ts-node src/cli.ts scrape:user-trades",
     "runs": "ts-node src/cli.ts runs"
   },
   "dependencies": {
