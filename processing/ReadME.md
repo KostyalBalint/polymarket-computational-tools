@@ -6,6 +6,29 @@
 cp .env.example .env
 ```
 
+Create a conda virtual environment
+
+```bash
+conda create --name polymarket --file requirements.txt python=3.12 
+```
+
+Activate it
+```bash
+conda activate polymarket 
+```
+
+Install dependencies
+
+```bash
+conda install --file conda_requirements.txt
+```
+
+Save dependencies lock
+
+```bash
+conda list -e > requirements.txt
+```
+
 And fill the required `DATABASE_URL` variable in the `.env` file with the database connection string.
 
 ### Use Prisma Client to query the database

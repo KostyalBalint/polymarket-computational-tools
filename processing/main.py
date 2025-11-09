@@ -1,4 +1,3 @@
-from prisma import Prisma
 import os
 import asyncio
 import asyncpg
@@ -26,17 +25,6 @@ def remove_schema_param(url):
 
 
 async def main():
-    ## Querying with relations and type-safe access
-    db = Prisma()
-    await db.connect()
-
-    # Type-safe access
-    markets = await db.market.count()
-
-    print(f'Market count {markets}')
-
-    await db.disconnect()
-
     ## Use regular SQL
     # Remove schema parameter for asyncpg
     asyncpg_url = remove_schema_param(DATABASE_URL)
