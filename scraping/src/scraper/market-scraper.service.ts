@@ -343,16 +343,38 @@ export class MarketScraperService {
         })),
       },
       marketOutcomes: {
-        connectOrCreate: clobTokenIds.map((tokenId, index) => ({
-          where: {
-            clobTokenId: tokenId,
-          },
-          create: {
+        connectOrCreate: clobTokenIds.map((tokenId, index) => {
+          // Parse outcomePrices array to get the price for this outcome
+          let outcomePrice: number | null = null;
+          try {
+            if (marketData.outcomePrices) {
+              const pricesArray = JSON.parse(marketData.outcomePrices);
+              if (Array.isArray(pricesArray) && pricesArray[index] !== undefined) {
+                outcomePrice = parseFloat(pricesArray[index]);
+              }
+            }
+          } catch (e) {
+            this.logger.warn(
+              `Could not parse outcomePrice for market ${marketData.id}, outcome index ${index}`,
+            );
+          }
+
+          const outcomeData = {
             clobTokenId: tokenId,
             outcomeText: JSON.parse(marketData.outcomes)[index] || '',
+            outcomePrice: outcomePrice,
+            priceUpdatedAt: outcomePrice !== null ? new Date() : null,
             // Price snapshots will be populated later
-          },
-        })),
+          };
+
+          return {
+            where: {
+              clobTokenId: tokenId,
+            },
+            create: outcomeData,
+            update: outcomeData,
+          };
+        }),
       },
     };
 
