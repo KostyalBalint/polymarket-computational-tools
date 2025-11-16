@@ -34,14 +34,19 @@ export class UserTradesScraperService {
     const logInterval = 10000; // Log every 10 seconds
 
     try {
-      // Get all users from UserProfile table
+      // Get all users from UserProfile table who have not been scraped yet (0 trades)
       const users = await this.prisma.userProfile.findMany({
+        where: {
+          UserTrade: {
+            none: {}, // Only users with no trades
+          },
+        },
         select: {
           proxyWallet: true,
         },
       });
 
-      this.logger.log(`Found ${users.length} users to process`);
+      this.logger.log(`Found ${users.length} users to process (users with 0 trades)`);
 
       // Process each user
       for (const user of users) {
