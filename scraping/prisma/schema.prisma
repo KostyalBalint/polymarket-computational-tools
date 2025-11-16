@@ -513,6 +513,7 @@ model UserTrade {
   @@index([conditionId])
   @@index([timestamp])
   @@index([transactionHash])
+  @@index([proxyWallet, timestamp(sort: Desc)]) // Composite index for incremental scraping query
 }
 
 // ============================================================================
