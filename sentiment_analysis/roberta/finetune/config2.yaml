@@ -1,0 +1,51 @@
+# RoBERTa Training Configuration for Polymarket Sentiment Analysis with Context
+
+# Test Mode: Set to true to train on limited dataset (100 train, 20 test samples)
+test_mode: false
+
+# Data Configuration
+data:
+  path: "gemini_labeled_4k.csv"
+  test_size: 0.15
+  random_state: 42
+  # Column names in the CSV
+  title_column: "event_title"
+  description_column: "event_description"
+  comment_column: "body"
+  label_column: "label"
+
+# Model Configuration
+model:
+  base_model: "roberta-base"
+  num_labels: 3
+  max_length: 256
+
+# LoRA Configuration
+lora:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.1
+  bias: "none"
+
+# Training Configuration
+training:
+  learning_rate: 0.00002
+  lr_scheduler_type: "cosine"  # Add this
+  warmup_ratio: 0.1  # Add this - 10% warmup
+  per_device_train_batch_size: 16
+  per_device_eval_batch_size: 16
+  num_train_epochs: 20
+  weight_decay: 0.01
+  eval_strategy: "steps"
+  eval_steps: 50
+  save_strategy: "steps"
+  save_steps: 50
+  load_best_model_at_end: true
+  metric_for_best_model: "eval_f1"
+  logging_steps: 10
+  report_to: ["none"]  # Options: "tensorboard", "wandb", "none"
+  early_stopping_patience: 4
+  
+  # HuggingFace Hub settings (set push_to_hub: true to enable)
+  push_to_hub: false
+  hub_model_name: "roberta-polymarket-sentiment-lora-context"

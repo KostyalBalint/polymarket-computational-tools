@@ -1,0 +1,28 @@
+# Gemini Labeling Configuration File
+
+# Job ID to poll (if not provided, a new batch will be submitted)
+job_id: null
+
+# Whether to use File API for batch requests (true) or inline requests (false)
+use_file_api: true
+
+# Path to JSONL file for batch requests (required if use_file_api is true)
+file_path: "gemini_requests/batch_request.jsonl"
+
+# Start and end indices for processing a subset of the dataframe
+# Both must be specified together, or both must be null
+# Example: process rows 0 to 1000
+start: 3000
+end: 5000
+
+# Path to the input data file (relative to REPO environment variable)
+data_file: "comment_market_labeling_prompts.parquet"
+
+# Polling interval in seconds
+poll_interval: 60
+
+# Batch job name/identifier
+batch_name: "labeling_batch"
+
+# Model name to use
+model_name: "gemini-2.5-flash"
