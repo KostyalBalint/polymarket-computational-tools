@@ -47,7 +47,6 @@ Create `config.json`:
 ### Required Tables
 - `UserPosition`: `proxyWallet`, `size`, `endDate`, `slug`, `outcome`
 - `UserTrade`: `proxyWallet`, `timestamp`, `slug`, `outcome`, `eventSlug`
-- 
 
 ## Usage
 
@@ -66,7 +65,7 @@ Create `config.json`:
 This loads transactions, generates frequent itemsets, produces association rules, prints a summary, exports a CSV of rules, and optionally produces recommendations for selected users.
 
 ```bash
-python python main.py
+python main.py
 ```
 
 **Command-line recommendation mode:**
