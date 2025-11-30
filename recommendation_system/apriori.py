@@ -47,7 +47,7 @@ class Apriori:
                 ut."proxyWallet" as transaction_id,
                 ut.slug || '_' || ut.outcome as item
             FROM "UserTrade" ut
-            WHERE ut.timestamp >= NOW() - INTERVAL '%s days'
+            WHERE ut.timestamp >= NOW() - INTERVAL '1 day' * %s
             ORDER BY ut."proxyWallet"
             """
             cursor.execute(query, (days_back,))
@@ -58,7 +58,7 @@ class Apriori:
                 ut."proxyWallet" || '_' || DATE(ut.timestamp) as transaction_id,
                 ut.slug || '_' || ut.outcome as item
             FROM "UserTrade" ut
-            WHERE ut.timestamp >= NOW() - INTERVAL '%s days'
+            WHERE ut.timestamp >= NOW() - INTERVAL '1 day' * %s
             ORDER BY transaction_id
             """
             cursor.execute(query, (days_back,))
@@ -69,7 +69,7 @@ class Apriori:
                 ut."proxyWallet" || '_' || ut."eventSlug" as transaction_id,
                 ut.slug || '_' || ut.outcome as item
             FROM "UserTrade" ut
-            WHERE ut.timestamp >= NOW() - INTERVAL '%s days'
+            WHERE ut.timestamp >= NOW() - INTERVAL '1 day' * %s
                 AND ut."eventSlug" IS NOT NULL
             ORDER BY transaction_id
             """
@@ -92,16 +92,16 @@ class Apriori:
             if len(items) >= min_items
         ]
 
-        print(f"\n📊 TRANSACTION STATISTICS:")
-        print(f"   Total transactions: {len(self.transactions)}")
+        print(f"\nTRANSACTION STATISTICS:")
+        print(f"\tTotal transactions: {len(self.transactions)}")
         if self.transactions:
             avg_items = sum(len(t) for t in self.transactions) / len(self.transactions)
-            print(f"   Average items per transaction: {avg_items:.2f}")
-            print(f"   Total unique items: {len(set().union(*self.transactions))}")
+            print(f"\tAverage items per transaction: {avg_items:.2f}")
+            print(f"\tTotal unique items: {len(set().union(*self.transactions))}")
 
         if test:
             for t in self.transactions:
-                print(f"   Transaction {t}: {list(t)[:5]}" +
+                print(f"\tTransaction {t}: {list(t)[:5]}" +
                       ("..." if len(t) > 5 else ""))
         return self.transactions
 
@@ -145,10 +145,10 @@ class Apriori:
 
             # Show top items by support
             sorted_items = sorted(frequent_items.items(), key=lambda x: x[1], reverse=True)
-            print(f"\n📊 TOP 10 MOST FREQUENT ITEMS:")
+            print(f"\nTOP 10 MOST FREQUENT ITEMS:")
             for i, (item_set, sup) in enumerate(sorted_items[:10], 1):
                 item = list(item_set)[0]
-                print(f"   {i}. {item}: {sup:.3f} ({sup * 100:.1f}%)")
+                print(f"\t{i}. {item}: {sup:.3f} ({sup * 100:.1f}%)")
 
         return frequent_items
 
@@ -164,16 +164,16 @@ class Apriori:
     @staticmethod
     def _generate_candidates(prev_frequent: List[frozenset], k: int, test: bool = False) -> List[frozenset]:
         if test:
-            print(f"\n   Generating candidate {k}-itemsets...")
-            print(f"   Starting with {len(prev_frequent)} frequent {k - 1}-itemsets")
+            print(f"\nGenerating candidate {k}-itemsets...")
+            print(f"Starting with {len(prev_frequent)} frequent {k - 1}-itemsets")
 
         candidates = []
         n = len(prev_frequent)
 
-        # Join step: merge itemsets
+        # Join step: merge item_sets
         for i in range(n):
             for j in range(i + 1, n):
-                # Union of two (k-1)-itemsets
+                # Union of two (k-1)-item_sets
                 union = prev_frequent[i] | prev_frequent[j]
 
                 # If union has exactly k items, it's a valid candidate
@@ -184,7 +184,7 @@ class Apriori:
         candidates = list(set(candidates))
 
         if test:
-            print(f"\tGenerated {len(candidates)} candidate {k}-itemsets")
+            print(f"\tGenerated {len(candidates)} candidate {k}-item_sets")
             if candidates and len(candidates) <= 5:
                 print(f"\tExamples: {[list(c) for c in candidates[:5]]}")
 
@@ -208,7 +208,7 @@ class Apriori:
         self.frequent_item_sets = {1: self._get_frequent_1_item_sets(min_support, test)}
 
         if not self.frequent_item_sets[1]:
-            print("\n⚠️  No frequent 1-itemsets found. Try lowering min_support.")
+            print("\nNo frequent 1-itemsets found. Try lowering min_support.")
             return self.frequent_item_sets
 
         k = 2
@@ -239,7 +239,7 @@ class Apriori:
             if frequent_k:
                 self.frequent_item_sets[k] = frequent_k
                 if test:
-                    print(f"\t✅Found {len(frequent_k)} frequent {k}-item_sets")
+                    print(f"\tFound {len(frequent_k)} frequent {k}-item_sets")
 
                     # Show examples
                     sorted_item_sets = sorted(frequent_k.items(), key=lambda x: x[1], reverse=True)
@@ -249,7 +249,7 @@ class Apriori:
                 k += 1
             else:
                 if test:
-                    print(f"\t❌No frequent {k}-item_sets found. Stopping.")
+                    print(f"\tNo frequent {k}-item_sets found. Stopping.")
                 break
 
         if test:
@@ -385,16 +385,16 @@ class Apriori:
 
                             if len(recommendations) >= top_n:
                                 if test:
-                                    print(f"\n✓ Found {len(recommendations)} recommendations")
-                                    print(f"  Matched {matching_rules} rules")
+                                    print(f"\nFound {len(recommendations)} recommendations")
+                                    print(f"\tMatched {matching_rules} rules")
                                 return recommendations
 
         if test:
-            print(f"\n✅Found {len(recommendations)} recommendations")
+            print(f"\nFound {len(recommendations)} recommendations")
             print(f"\tMatched {matching_rules} rules")
 
             if recommendations:
-                print(f"\n📊 TOP RECOMMENDATIONS:")
+                print(f"\nTOP RECOMMENDATIONS:")
                 for i, rec in enumerate(recommendations, 1):
                     print(f"\n   {i}. {rec['recommended_market']}")
                     print(f"\tBased on: {rec['based_on']}")
@@ -418,19 +418,19 @@ class Apriori:
     def print_summary(self):
         print("APRIORI ANALYSIS SUMMARY")
         if self.transactions:
-            print(f"\n📦 TRANSACTIONS:")
+            print(f"\nTRANSACTIONS:")
             print(f"\tTotal: {len(self.transactions)}")
             print(f"\tAvg items: {sum(len(t) for t in self.transactions) / len(self.transactions):.2f}")
 
         if self.frequent_item_sets:
-            print(f"\n🔍 FREQUENT ITEM SETS:")
+            print(f"\nFREQUENT ITEM SETS:")
             total = sum(len(item_sets) for item_sets in self.frequent_item_sets.values())
             print(f"\tTotal: {total}")
             for k, item_sets in sorted(self.frequent_item_sets.items()):
                 print(f"\t{k}-item_sets: {len(item_sets)}")
 
         if self.association_rules:
-            print(f"\n📏ASSOCIATION RULES:")
+            print(f"\nASSOCIATION RULES:")
             print(f"\tTotal: {len(self.association_rules)}")
 
             confidences = [r['confidence'] for r in self.association_rules]
@@ -440,10 +440,9 @@ class Apriori:
             print(f"\tAvg lift: {sum(lifts) / len(lifts):.3f}")
             print(f"\tMax lift: {max(lifts):.3f}")
 
-            print(f"\n🏆 TOP 3 RULES (by lift):")
-            for i, rule in enumerate(self.association_rules[:3], 1):
+            print(f"\nTOP 50 RULES (by lift):")
+            for i, rule in enumerate(self.association_rules[:50], 1):
                 ant = ', '.join(rule['antecedent'][:2])
                 cons = ', '.join(rule['consequent'][:1])
                 print(f"\t{i}. {ant} → {cons}")
-                print(f"\t\tConfidence: {rule['confidence']:.1%}, Lift: {rule['lift']:.2f}")
                 print(f"\t\tConfidence: {rule['confidence']:.1%}, Lift: {rule['lift']:.2f}")
