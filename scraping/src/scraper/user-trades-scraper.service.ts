@@ -34,14 +34,19 @@ export class UserTradesScraperService {
     const logInterval = 10000; // Log every 10 seconds
 
     try {
-      // Get all users from UserProfile table
+      // Get all users from UserProfile table who have not been scraped yet (0 trades)
       const users = await this.prisma.userProfile.findMany({
+        where: {
+          UserTrade: {
+            none: {}, // Only users with no trades
+          },
+        },
         select: {
           proxyWallet: true,
         },
       });
 
-      this.logger.log(`Found ${users.length} users to process`);
+      this.logger.log(`Found ${users.length} users to process (users with 0 trades)`);
 
       // Process each user
       for (const user of users) {
@@ -158,23 +163,39 @@ export class UserTradesScraperService {
           break;
         }
 
-        // Save new trades
-        for (const trade of newTrades) {
+        // Save new trades using batch insert
+        if (newTrades.length > 0) {
           try {
-            await this.saveTrade(trade, userAddress);
-            totalNewTrades++;
+            const result = await this.prisma.userTrade.createMany({
+              data: newTrades.map((trade) => ({
+                proxyWallet: trade.proxyWallet,
+                side: trade.side,
+                asset: trade.asset,
+                conditionId: trade.conditionId,
+                size: trade.size,
+                price: trade.price,
+                timestamp: new Date(trade.timestamp * 1000),
+                transactionHash: trade.transactionHash,
+                title: trade.title,
+                slug: trade.slug,
+                icon: trade.icon || null,
+                eventSlug: trade.eventSlug,
+                outcome: trade.outcome,
+                outcomeIndex: trade.outcomeIndex,
+              })),
+              skipDuplicates: true, // Skip trades that already exist (based on unique transactionHash)
+            });
+
+            totalNewTrades += result.count;
+
+            this.logger.debug(
+              `Batch inserted ${result.count} trades for user ${userAddress}`,
+            );
           } catch (error) {
-            // If it's a unique constraint violation, skip it (already exists)
-            if (
-              error instanceof Error &&
-              error.message.includes('Unique constraint')
-            ) {
-              this.logger.debug(
-                `Trade ${trade.transactionHash} already exists, skipping`,
-              );
-            } else {
-              throw error;
-            }
+            this.logger.error(
+              `Failed to batch insert trades for user ${userAddress}: ${(error as Error).message}`,
+            );
+            throw error;
           }
         }
 
@@ -206,45 +227,4 @@ export class UserTradesScraperService {
     }
   }
 
-  /**
-   * Save a single trade to the database
-   */
-  private async saveTrade(
-    trade: {
-      proxyWallet: string;
-      side: 'BUY' | 'SELL';
-      asset: string;
-      conditionId: string;
-      size: number;
-      price: number;
-      timestamp: number;
-      title: string;
-      slug: string;
-      icon?: string;
-      eventSlug: string;
-      outcome: string;
-      outcomeIndex: number;
-      transactionHash: string;
-    },
-    userAddress: string,
-  ): Promise<void> {
-    await this.prisma.userTrade.create({
-      data: {
-        proxyWallet: trade.proxyWallet,
-        side: trade.side,
-        asset: trade.asset,
-        conditionId: trade.conditionId,
-        size: trade.size,
-        price: trade.price,
-        timestamp: new Date(trade.timestamp * 1000), // Convert Unix timestamp to Date
-        transactionHash: trade.transactionHash,
-        title: trade.title,
-        slug: trade.slug,
-        icon: trade.icon || null,
-        eventSlug: trade.eventSlug,
-        outcome: trade.outcome,
-        outcomeIndex: trade.outcomeIndex,
-      },
-    });
-  }
 }

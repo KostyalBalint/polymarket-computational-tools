@@ -276,7 +276,9 @@ model MarketOutcome {
   clobTokenId String @unique // Keep as unique identifier for API references
   marketId    String
 
-  outcomeText String
+  outcomeText   String
+  outcomePrice  Float?   // Current price at scrape time
+  priceUpdatedAt DateTime? // When the outcomePrice was last updated
 
   // Relations
   market          Market       @relation(fields: [marketId], references: [id])
@@ -511,6 +513,7 @@ model UserTrade {
   @@index([conditionId])
   @@index([timestamp])
   @@index([transactionHash])
+  @@index([proxyWallet, timestamp(sort: Desc)]) // Composite index for incremental scraping query
 }
 
 // ============================================================================
