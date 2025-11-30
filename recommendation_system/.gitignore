@@ -220,6 +220,3 @@ __marimo__/
 
 #Testing outputs
 /output/*
-
-# Config file
-config.json
