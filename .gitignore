@@ -105,4 +105,5 @@ dist
 
 .idea
 .DS_Store
-*.pyctopic_based_recommender/train_user_events.csv
+*.pyc
+topic_based_recommender/train_user_events.csv
