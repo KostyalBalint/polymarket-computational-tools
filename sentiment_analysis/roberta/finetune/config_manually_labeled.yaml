@@ -1,0 +1,40 @@
+# RoBERTa Training Configuration for Polymarket Sentiment Analysis
+
+# Test Mode: Set to true to train on limited dataset (1000 train, 200 test samples)
+test_mode: true
+
+# Data Configuration
+data:
+  path: "../vader/project-5-at-2025-11-24-11-40-fc32ef64.csv"
+  test_size: 0.2
+  random_state: 42
+
+# Model Configuration
+model:
+  base_model: "roberta-base"
+  num_labels: 3
+  max_length: 256
+
+# LoRA Configuration
+lora:
+  r: 8
+  lora_alpha: 32
+  lora_dropout: 0.1
+  target_modules: "all-linear"
+
+# Training Configuration
+training:
+  learning_rate: 0.001
+  per_device_train_batch_size: 32
+  per_device_eval_batch_size: 32
+  num_train_epochs: 1
+  weight_decay: 0.01
+  eval_strategy: "epoch"
+  save_strategy: "epoch"
+  load_best_model_at_end: true
+  logging_steps: 10
+  report_to: ["none"]  # Options: "tensorboard", "wandb", "none"
+  
+  # HuggingFace Hub settings (set push_to_hub: true to enable)
+  push_to_hub: false
+  hub_model_name: "roberta-polymarket-sentiment-lora-3-labels"
