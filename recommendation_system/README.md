@@ -51,11 +51,38 @@ Create `config.json`:
 
 ## Usage
 
-**Interactive mode:**
+**Runs the complete workflow:**
+- loads parameters
+- connects to the database
+- fetches transactions
+- generates frequent itemsets
+- generates association rules
+- prints a summary
+- exports rules to CSV
+- enters interactive recommendation mode
+
+**Default mode:**
+
+This loads transactions, generates frequent itemsets, produces association rules, prints a summary, exports a CSV of rules, and optionally produces recommendations for selected users.
+
 ```bash
 python python main.py
 ```
-This loads transactions, generates frequent itemsets, produces association rules, prints a summary, exports a CSV of rules, and optionally produces recommendations for selected users.
+
+**Command-line recommendation mode:**
+
+Runs only the recommendation function for a single user (name, pseudonym, or wallet):
+
+```bash
+python main.py --user USERNAME
+```
+
+**Examples:**
+```bash
+python main.py --user completion
+python main.py -u "0xfeb581080aee6dc26c264a647b30a9cd44d5a393"
+python main.py -u somePseudonym
+```
 
 ## Parameters
 

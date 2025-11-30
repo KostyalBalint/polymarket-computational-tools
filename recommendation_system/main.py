@@ -99,6 +99,7 @@ def export_to_csv(apriori: Apriori):
 
 def get_users():
     # Get some example user positions from database
+    conn = psycopg.connect(get_connection_string())
     cursor = conn.cursor()
     cursor.execute("""
         SELECT DISTINCT
@@ -146,7 +147,6 @@ def get_users_with_min_transactions(conn, min_transactions: int = 2, mode: str =
         params = (days_back, min_transactions)
 
     elif mode == "sessions":
-        # group by user per calendar day
         query = """
             SELECT 
                 ut."proxyWallet",
@@ -289,13 +289,11 @@ def get_user_transactions_by_username(
 
     print(f"Raw rows fetched for user: {len(results)}")
 
-    # 3) Group items by transaction_id (exactly like Apriori.fetch_user_transactions)
     transaction_dict = defaultdict(set)
     for transaction_id, item in results:
         if item:
             transaction_dict[transaction_id].add(item)
 
-    # 4) Apply min_items filter
     transactions = [
         items for items in transaction_dict.values()
         if len(items) >= min_items
@@ -361,34 +359,11 @@ def get_recommendations_for_user(username: str):
             test=True,
         )
         print(recommendations)
+        return recommendations
     conn.close()
+    return None
 
-if __name__ == "__main__":
-    # test_connection()
-    # print_schema()
-    # conn = psycopg.connect(get_connection_string())
-    # users = get_users_with_min_transactions(conn, min_transactions=2, mode="trades")
-    # for username, wallet, tx_count in users:
-    #     print(f"{username} ({wallet}) → {tx_count} transactions")
-    # wallet, transactions = get_user_transactions_by_username(
-    #     conn,
-    #     username="completion",
-    #     mode="trades",
-    #     days_back=60,
-    #     min_items=2
-    # )
-    #
-    # print("User wallet:", wallet)
-    # print("Found transactions:", transactions)
-    # get_top_rows("Tag",200)
-    # get_top_rows("UserProfile",1)
-    # conn_str = get_connection_string()
-    # conn = psycopg.connect(conn_str)
-    #
-    # best = optimize_apriori_parameters(conn)
-    # print("\nRecommended best parameters:")
-    # print(best)
-
+def default_run():
     input("Press Enter to start...")
     params = get_apriori_params()
     print(f"Parameters:")
@@ -485,3 +460,31 @@ if __name__ == "__main__":
 
     conn.close()
     print("\nProgram finished...")
+
+if __name__ == "__main__":
+    import sys
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Apriori-based betting recommender"
+    )
+    parser.add_argument(
+        "--user",
+        "-u",
+        type=str,
+        help="Generate recommendations for a specific username"
+    )
+
+    args = parser.parse_args()
+
+    # CASE 1: No arguments → run full Apriori pipeline
+    if len(sys.argv) == 1:
+        default_run()
+        sys.exit(0)
+
+    # CASE 2: Command-line username → only run recommendations for user
+    if args.user:
+        get_recommendations_for_user(args.user)
+        sys.exit(0)
+
+    parser.print_help()
