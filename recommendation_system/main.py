@@ -1,5 +1,6 @@
+from collections import defaultdict
 from datetime import datetime
-from typing import Tuple, List
+from typing import Tuple, List, Set
 
 import psycopg
 import os
@@ -116,38 +117,271 @@ def get_users():
     cursor.close()
     return users
 
-def get_user_markets_by_name(user_name: str) -> Tuple[str, List[str]]:
-    with conn.cursor() as cur:
-        cur.execute("""
+def get_users_with_min_transactions(conn, min_transactions: int = 2, mode: str = "trades", days_back: int = 60):
+    if mode == "positions":
+        query = """
             SELECT 
                 up."proxyWallet",
-                ARRAY_AGG(upos.slug || '_' || upos.outcome) as markets
-            FROM "UserProfile" up
-            LEFT JOIN "UserPosition" upos 
-                ON up."proxyWallet" = upos."proxyWallet"
-                AND upos.size > 0
-                AND (upos."endDate" IS NULL 
-                     OR upos."endDate" = '' 
-                     OR upos."endDate"::timestamp > NOW())
-            WHERE LOWER(up.name) = LOWER(%s) 
-                OR LOWER(up.pseudonym) = LOWER(%s)
+                COUNT(*) AS tx_count
+            FROM "UserPosition" up
+            WHERE up.size > 0
+              AND (up."endDate" IS NULL
+                   OR up."endDate" = ''
+                   OR up."endDate"::timestamp > NOW())
             GROUP BY up."proxyWallet"
-        """, (user_name, user_name))
-        result = cur.fetchone()
+            HAVING COUNT(*) > %s;
+        """
+        params = (min_transactions,)
 
-    if result:
-        proxy_wallet = result[0]
-        markets = result[1] if result[1] and result[1][0] is not None else []
-        return proxy_wallet, markets
+    elif mode == "trades":
+        query = """
+            SELECT 
+                ut."proxyWallet",
+                COUNT(*) AS tx_count
+            FROM "UserTrade" ut
+            WHERE ut.timestamp >= NOW() - INTERVAL '1 day' * %s
+            GROUP BY ut."proxyWallet"
+            HAVING COUNT(*) > %s;
+        """
+        params = (days_back, min_transactions)
 
-    return None, []
+    elif mode == "sessions":
+        # group by user per calendar day
+        query = """
+            SELECT 
+                ut."proxyWallet",
+                COUNT(DISTINCT ut."proxyWallet" || '_' || DATE(ut.timestamp)) AS tx_count
+            FROM "UserTrade" ut
+            WHERE ut.timestamp >= NOW() - INTERVAL '1 day' * %s
+            GROUP BY ut."proxyWallet"
+            HAVING COUNT(DISTINCT ut."proxyWallet" || '_' || DATE(ut.timestamp)) > %s;
+        """
+        params = (days_back, min_transactions)
+
+    elif mode == "events":
+        query = """
+            SELECT
+                ut."proxyWallet",
+                COUNT(DISTINCT ut."proxyWallet" || '_' || ut."eventSlug") AS tx_count
+            FROM "UserTrade" ut
+            WHERE ut."eventSlug" IS NOT NULL
+              AND ut.timestamp >= NOW() - INTERVAL '1 day' * %s
+            GROUP BY ut."proxyWallet"
+            HAVING COUNT(DISTINCT ut."proxyWallet" || '_' || ut."eventSlug") > %s;
+        """
+        params = (days_back, min_transactions)
+
+    else:
+        raise ValueError(f"Invalid mode '{mode}'")
+
+    with conn.cursor() as cur:
+        cur.execute(query, params)
+        wallets = cur.fetchall()
+
+    if not wallets:
+        return []
+
+    # Map proxyWallet → usernames (name or pseudonym)
+    results = []
+    with conn.cursor() as cur:
+        for wallet, tx_count in wallets:
+            cur.execute("""
+                SELECT COALESCE("name", "pseudonym", "address") 
+                FROM "UserProfile"
+                WHERE "proxyWallet" = %s
+                LIMIT 1;
+            """, (wallet,))
+            row = cur.fetchone()
+            username = row[0] if row else None
+            results.append((username, wallet, tx_count))
+
+    return results
+
+def get_user_transactions_by_username(
+    conn,
+    username: str,
+    mode: str = "trades",
+    min_items: int = 2,
+    days_back: int = 60,
+) -> Tuple[str | None, List[Set[str]]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT 
+                up."proxyWallet"
+            FROM "UserProfile" up
+            WHERE LOWER(up.name) = LOWER(%s)
+               OR LOWER(up.pseudonym) = LOWER(%s)
+            LIMIT 1
+            """,
+            (username, username),
+        )
+        row = cur.fetchone()
+
+    if not row:
+        print(f"No user found with name/pseudonym = {username}")
+        return None, []
+
+    proxy_wallet = row[0]
+    print(f"Found proxyWallet for '{username}': {proxy_wallet}")
+
+    cursor = conn.cursor()
+    print("FETCHING TRANSACTION DATA FOR SINGLE USER")
+
+    if mode == "positions":
+        query = """
+        SELECT 
+            up."proxyWallet" as transaction_id,
+            up.slug || '_' || up.outcome as item
+        FROM "UserPosition" up
+        WHERE up.size > 0 
+            AND (up."endDate" IS NULL 
+                 OR up."endDate" = '' 
+                 OR up."endDate"::timestamp > NOW())
+            AND up."proxyWallet" = %s
+        ORDER BY up."proxyWallet"
+        """
+        cursor.execute(query, (proxy_wallet,))
+
+    elif mode == "trades":
+        query = """
+        SELECT 
+            ut."proxyWallet" as transaction_id,
+            ut.slug || '_' || ut.outcome as item
+        FROM "UserTrade" ut
+        WHERE ut."proxyWallet" = %s
+          AND ut.timestamp >= NOW() - INTERVAL '1 day' * %s
+        ORDER BY ut."proxyWallet"
+        """
+        cursor.execute(query, (proxy_wallet, days_back))
+
+    elif mode == "sessions":
+        query = """
+        SELECT 
+            ut."proxyWallet" || '_' || DATE(ut.timestamp) as transaction_id,
+            ut.slug || '_' || ut.outcome as item
+        FROM "UserTrade" ut
+        WHERE ut."proxyWallet" = %s
+          AND ut.timestamp >= NOW() - INTERVAL '1 day' * %s
+        ORDER BY transaction_id
+        """
+        cursor.execute(query, (proxy_wallet, days_back))
+
+    elif mode == "events":
+        query = """
+        SELECT 
+            ut."proxyWallet" || '_' || ut."eventSlug" as transaction_id,
+            ut.slug || '_' || ut.outcome as item
+        FROM "UserTrade" ut
+        WHERE ut."proxyWallet" = %s
+          AND ut.timestamp >= NOW() - INTERVAL '1 day' * %s
+          AND ut."eventSlug" IS NOT NULL
+        ORDER BY transaction_id
+        """
+        cursor.execute(query, (proxy_wallet, days_back))
+
+    else:
+        cursor.close()
+        raise ValueError(f"Invalid mode: {mode}")
+
+    results = cursor.fetchall()
+    cursor.close()
+
+    print(f"Raw rows fetched for user: {len(results)}")
+
+    # 3) Group items by transaction_id (exactly like Apriori.fetch_user_transactions)
+    transaction_dict = defaultdict(set)
+    for transaction_id, item in results:
+        if item:
+            transaction_dict[transaction_id].add(item)
+
+    # 4) Apply min_items filter
+    transactions = [
+        items for items in transaction_dict.values()
+        if len(items) >= min_items
+    ]
+
+    print(f"User '{username}' transaction statistics:")
+    print(f"\tTotal transactions (after min_items={min_items}): {len(transactions)}")
+    if transactions:
+        avg_items = sum(len(t) for t in transactions) / len(transactions)
+        print(f"\tAverage items per transaction: {avg_items:.2f}")
+        print(f"\tTotal unique items: {len(set().union(*transactions))}")
+
+    return proxy_wallet, transactions
+
+def get_recommendations_for_user(username: str):
+    test_connection()
+    conn = psycopg.connect(get_connection_string())
+    params = get_apriori_params()
+    apriori = Apriori(conn)
+    transactions = apriori.fetch_user_transactions(
+        mode=params['mode'],
+        min_items=params['min_items'],
+        days_back=params['days_back'],
+        test=False
+    )
+    if not transactions:
+        print("No transactions found!")
+        conn.close()
+        exit(1)
+    frequent_item_sets = apriori.generate_frequent_item_sets(
+        min_support=params['min_support'],
+        test=False
+    )
+    if not frequent_item_sets or len(frequent_item_sets) == 1:
+        print("Only 1-item_sets found!")
+        conn.close()
+        exit(1)
+    rules = apriori.generate_association_rules(
+        min_confidence=params['min_confidence'],
+        min_lift=params['min_lift'],
+        test=False
+    )
+    if not rules:
+        print("No rules found!")
+        conn.close()
+        exit(1)
+    apriori.print_summary()
+    export_to_csv(apriori)
+    wallet, transactions = get_user_transactions_by_username(
+        conn=conn,
+        username=username,
+        mode=params['mode'],
+        min_items=params['min_items'],
+        days_back=params['days_back']
+    )
+    if transactions is None:
+        print(f"No transactions found for user name {username}")
+    else:
+        user_markets = list({item for group in transactions for item in group})
+        recommendations = apriori.get_recommendations(
+            user_markets=user_markets,
+            top_n=5,
+            test=True,
+        )
+        print(recommendations)
+    conn.close()
 
 if __name__ == "__main__":
     # test_connection()
     # print_schema()
+    # conn = psycopg.connect(get_connection_string())
+    # users = get_users_with_min_transactions(conn, min_transactions=2, mode="trades")
+    # for username, wallet, tx_count in users:
+    #     print(f"{username} ({wallet}) → {tx_count} transactions")
+    # wallet, transactions = get_user_transactions_by_username(
+    #     conn,
+    #     username="completion",
+    #     mode="trades",
+    #     days_back=60,
+    #     min_items=2
+    # )
+    #
+    # print("User wallet:", wallet)
+    # print("Found transactions:", transactions)
     # get_top_rows("Tag",200)
     # get_top_rows("UserProfile",1)
-
     # conn_str = get_connection_string()
     # conn = psycopg.connect(conn_str)
     #
@@ -212,35 +446,39 @@ if __name__ == "__main__":
     test_users = users[:3]
     print(test_users)
     if test_users:
-        print("Example users with current positions:")
-        for i, (user_id, markets) in enumerate(test_users, 1):
+        print("Example users with current positions")
+        for i, (user_id, transations) in enumerate(test_users, 1):
             print(f"\n{i}. User {user_id}")
-            print(f"\tMarkets: {markets[:3]}{'...' if len(markets) > 3 else ''}")
+            print(f"\tMarkets: {transations[:3]}{'...' if len(transations) > 3 else ''}")
 
-        input("\nPress Enter to generate recommendations for these users...")
-
-        for i, (user_id, markets) in enumerate(test_users, 1):
+        for i, (user_id, transations) in enumerate(test_users, 1):
             print("---------------------------------------------------------")
             print(f"RECOMMENDATIONS FOR USER ID{i}")
             recommendations = apriori.get_recommendations(
-                user_markets=markets,
+                user_markets=transations,
                 top_n=5,
                 test=True
             )
             if not recommendations:
                 print("\tNo recommendations found for this user.")
 
-
     while True:
         username = input("\nPlease enter user to get recommendations for or press Enter to quit:")
         if username == "":
             break
-        markets = get_user_markets_by_name(username)
-        if markets is None:
+        wallet, transactions = get_user_transactions_by_username(
+            conn = conn,
+            username=username,
+            mode=params['mode'],
+            min_items=params['min_items'],
+            days_back=params['days_back']
+        )
+        if transactions is None:
             print(f"No transactions found for user name {username}")
         else:
+            user_markets = list({item for group in transactions for item in group})
             recommendations = apriori.get_recommendations(
-                user_markets=markets[1],
+                user_markets=user_markets,
                 top_n=5,
                 test=True,
             )
