@@ -8,7 +8,7 @@ import os
 import json
 from psycopg import sql
 
-from apriori import Apriori
+from recommendation_system.apriori import Apriori
 
 def get_connection_string():
     env_url = os.getenv("DATABASE_URL")
@@ -28,7 +28,7 @@ def get_apriori_params():
         'min_confidence': 0.3,  # 10% minimum confidence
         'min_lift': 1.1  # 1.2x minimum lift
     }
-    with open("config.json") as f:
+    with open("recommendation_system\config.json") as f:
         cfg = json.load(f)
 
     params.update(cfg)
