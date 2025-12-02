@@ -37,7 +37,7 @@ def recommend_events_for_user_by_topic_based(id_to_index, normalized_embeddings,
         if event_id_int not in events_df.index:
             continue
 
-        similar_events = find_similar_events(id_to_index, normalized_embeddings,index,index_to_id, events_df, event_id, similar_per_event)
+        similar_events = find_similar_events(id_to_index, normalized_embeddings,index,index_to_id, events_df, event_id_int, similar_per_event)
 
         # Add to scores and weight by the similartiy.
         for similar_event in similar_events:
