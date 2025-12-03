@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from collections import defaultdict
 from implicit.als import AlternatingLeastSquares
+import pickle
 
 from collaborative_filtering.utils import load_trade_tags
 from collaborative_filtering.utils import load_events_with_tags
@@ -17,8 +18,7 @@ loaded = False
 
 
 def load_cf_model(model_path="models/collaborative_filtering_model.npz",
-                  trade_cache="collaborative_filtering/df_trade_tags_cache",
-                  events_cache="collaborative_filtering/events_tag_cache"):
+                  mappings_path="models/cf_mappings.pkl",):
     global model, user_to_id, tag_to_id, event_tags, event_titles, tag_labels, loaded
 
     if loaded:
@@ -29,41 +29,16 @@ def load_cf_model(model_path="models/collaborative_filtering_model.npz",
     model = AlternatingLeastSquares(factors=64)
     model = model.load(model_path)
 
-    # rebuild mappings to match training
-    trades_df = load_trade_tags(trade_cache)
-
-    trades_df = trades_df.sort_values(['user_id', 'timestamp'])
-    trades_df['row_num'] = trades_df.groupby('user_id').cumcount()
-    trades_df['total'] = trades_df.groupby('user_id')['timestamp'].transform('size')
-    trades_df['cutoff'] = (trades_df['total'] * 0.8).astype(int)
-    trades_df['cutoff'] = trades_df['cutoff'].clip(lower=1, upper=trades_df['total']-1)
-    trades_df = trades_df[trades_df['total'] >= 2]
-
-    train_df = trades_df[trades_df['row_num'] < trades_df['cutoff']].copy()
-    train_agg = train_df.groupby(['user_id', 'tag_id', 'tag_label'])['trade_count'].sum().reset_index()
-
-    users_cat = train_agg['user_id'].astype('category')
-    tags_cat = train_agg['tag_id'].astype('category')
-
-    user_to_id = {u: i for i, u in enumerate(users_cat.cat.categories)}
-    tag_to_id = {t: i for i, t in enumerate(tags_cat.cat.categories)}
+    with open(mappings_path, 'rb') as f:
+            mappings = pickle.load(f)
+            user_to_id = mappings['user_to_id']
+            tag_to_id = mappings['tag_to_id']
+            # Convert back to defaultdict
+            event_tags = defaultdict(list, mappings['event_tags'])
+            event_titles = mappings['event_titles']
+            tag_labels = mappings['tag_labels']
 
     print(f"  {len(user_to_id)} users, {len(tag_to_id)} tags")
-
-    # load event-tag mappings
-    events_df = load_events_with_tags(events_cache)
-
-    for _, row in events_df.iterrows():
-        event_id = int(row['event_id'])
-        tag_id = row['tag_id']
-
-        if tag_id in tag_to_id:
-            t_id = tag_to_id[tag_id]
-            event_tags[event_id].append(t_id)
-            tag_labels[t_id] = row['tag_label']
-
-        event_titles[event_id] = row['title']
-
     print(f"  {len(event_tags)} events mapped")
 
     loaded = True

@@ -48,7 +48,9 @@ def load_trade_tags(cache_dir=trades_cache_dir, env_var="DATABASE_URL"):
     if os.path.isdir(cache_dir):
         df = load_from_cache(cache_dir, "df_trade_tags_part_*.parquet")
         if df is not None:
-            return df
+            if "event_id" in df.columns and "item" in df.columns:
+                return df
+            print("Cache outdated (missing event_id/item), reloading...")
 
     print("No cache, querying database...")
     load_dotenv()
@@ -66,15 +68,19 @@ def load_trade_tags(cache_dir=trades_cache_dir, env_var="DATABASE_URL"):
         t.id as tag_id,
         t.label as tag_label,
         ut.timestamp,
+        e.id as event_id,
+        ut.slug || '_' || ut.outcome as item,
         COUNT(*) as trade_count
     FROM "UserTrade" ut
     JOIN "UserProfile" up ON ut."proxyWallet" = up."proxyWallet"
     JOIN "Market" m ON ut."conditionId" = m."conditionId"
     JOIN "_MarketToTag" mt ON m.id = mt."A"
     JOIN "Tag" t ON mt."B" = t.id
+    LEFT JOIN "_EventToMarket" em ON m.id = em."B"
+    LEFT JOIN "Event" e ON em."A" = e.id
     WHERE ut."proxyWallet" IS NOT NULL
       AND up.address IS NOT NULL
-    GROUP BY up.address, t.id, t.label, ut.timestamp
+    GROUP BY up.address, t.id, t.label, ut.timestamp, e.id, ut.slug, ut.outcome
     ORDER BY ut.timestamp
     """
 
