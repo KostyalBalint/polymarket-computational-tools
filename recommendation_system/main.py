@@ -36,10 +36,8 @@ def get_apriori_params():
 def test_connection():
     conn_str = get_connection_string()
     with psycopg.connect(conn_str) as conn:
-        print("Connected successfully!")
         with conn.cursor() as cur:
             cur.execute("SELECT now()")
-            print("Current time:", cur.fetchone()[0])
 
 def print_schema():
     try:
@@ -91,11 +89,10 @@ def get_top_rows(table_name, limit=5):
     except psycopg.errors.UndefinedTable:
         print(f"Table '{table_name}' does not exist.")
 
-def export_to_csv(apriori: Apriori):
+def export_to_csv(apriori: Apriori, file_name: str = None):
     rules_df = apriori.export_rules_to_dataframe()
-    csv_filename = f'data/association_cache/association_rules_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+    csv_filename = file_name if file_name else f'data/association_cache/association_rules_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
     rules_df.to_csv(csv_filename, index=False)
-    print(f"Rules exported to: {csv_filename}")
 
 def get_users():
     # Get some example user positions from database
@@ -307,7 +304,7 @@ def get_user_transactions_by_username(
 
     return proxy_wallet, transactions
 
-def get_recommendations_for_user(username: str):
+def get_recommendations_for_user(username: str, force_renew_rules: bool = False, test: bool = False):
     test_connection()
     conn = psycopg.connect(get_connection_string())
     params = get_apriori_params()
@@ -321,7 +318,7 @@ def get_recommendations_for_user(username: str):
     if not transactions:
         print("No transactions found!")
         conn.close()
-        exit(1)
+        return []
     frequent_item_sets = apriori.generate_frequent_item_sets(
         min_support=params['min_support'],
         test=False
@@ -329,7 +326,7 @@ def get_recommendations_for_user(username: str):
     if not frequent_item_sets or len(frequent_item_sets) == 1:
         print("Only 1-item_sets found!")
         conn.close()
-        exit(1)
+        return []
     rules = apriori.generate_association_rules(
         min_confidence=params['min_confidence'],
         min_lift=params['min_lift'],
@@ -338,8 +335,7 @@ def get_recommendations_for_user(username: str):
     if not rules:
         print("No rules found!")
         conn.close()
-        exit(1)
-    apriori.print_summary()
+        return []
     export_to_csv(apriori)
     wallet, transactions = get_user_transactions_by_username(
         conn=conn,
@@ -355,9 +351,8 @@ def get_recommendations_for_user(username: str):
         recommendations = apriori.get_recommendations(
             user_markets=user_markets,
             top_n=5,
-            test=True,
+            test=False,
         )
-        print(recommendations)
         return recommendations
     conn.close()
     return None
