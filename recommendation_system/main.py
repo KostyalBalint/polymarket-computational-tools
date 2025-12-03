@@ -1,3 +1,4 @@
+import csv
 from collections import defaultdict
 from datetime import datetime
 from typing import Tuple, List, Set
@@ -93,6 +94,23 @@ def export_to_csv(apriori: Apriori, file_name: str = None):
     rules_df = apriori.export_rules_to_dataframe()
     csv_filename = file_name if file_name else f'data/association_cache/association_rules_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
     rules_df.to_csv(csv_filename, index=False)
+
+def load_rules_from_csv(filepath="association_rules.csv"):
+    if not os.path.exists(filepath):
+        return None
+
+    rules = []
+    with open(filepath, "r", newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            rules.append({
+                "antecedent": row["antecedent"].split(","),
+                "consequent": row["consequent"],
+                "support": float(row["support"]),
+                "confidence": float(row["confidence"]),
+                "lift": float(row["lift"]),
+            })
+    return rules
 
 def get_users():
     # Get some example user positions from database
@@ -309,34 +327,45 @@ def get_recommendations_for_user(username: str, force_renew_rules: bool = False,
     conn = psycopg.connect(get_connection_string())
     params = get_apriori_params()
     apriori = Apriori(conn)
-    transactions = apriori.fetch_user_transactions(
-        mode=params['mode'],
-        min_items=params['min_items'],
-        days_back=params['days_back'],
-        test=False
-    )
-    if not transactions:
-        print("No transactions found!")
-        conn.close()
-        return []
-    frequent_item_sets = apriori.generate_frequent_item_sets(
-        min_support=params['min_support'],
-        test=False
-    )
-    if not frequent_item_sets or len(frequent_item_sets) == 1:
-        print("Only 1-item_sets found!")
-        conn.close()
-        return []
-    rules = apriori.generate_association_rules(
-        min_confidence=params['min_confidence'],
-        min_lift=params['min_lift'],
-        test=False
-    )
-    if not rules:
-        print("No rules found!")
-        conn.close()
-        return []
-    export_to_csv(apriori)
+
+    rules_file = "association_rules.csv"
+    rules = None
+
+    if not force_renew_rules:
+        rules = load_rules_from_csv(rules_file)
+
+    if rules:
+        apriori.load_rules(rules)
+    else:
+        transactions = apriori.fetch_user_transactions(
+            mode=params['mode'],
+            min_items=params['min_items'],
+            days_back=params['days_back'],
+            test=False
+        )
+        if not transactions:
+            print("No transactions found!")
+            conn.close()
+            return []
+        frequent_item_sets = apriori.generate_frequent_item_sets(
+            min_support=params['min_support'],
+            test=False
+        )
+        if not frequent_item_sets or len(frequent_item_sets) == 1:
+            print("Only 1-item_sets found!")
+            conn.close()
+            return []
+        rules = apriori.generate_association_rules(
+            min_confidence=params['min_confidence'],
+            min_lift=params['min_lift'],
+            test=False
+        )
+        if not rules:
+            print("No rules found!")
+            conn.close()
+            return []
+        export_to_csv(apriori, rules_file)
+
     wallet, transactions = get_user_transactions_by_username(
         conn=conn,
         username=username,
@@ -353,6 +382,7 @@ def get_recommendations_for_user(username: str, force_renew_rules: bool = False,
             top_n=5,
             test=False,
         )
+        conn.close()
         return recommendations
     conn.close()
     return None

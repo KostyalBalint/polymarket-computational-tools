@@ -10,6 +10,9 @@ class Apriori:
         self.frequent_item_sets = {}
         self.association_rules = []
 
+    def load_rules(self, rules):
+        self.association_rules = rules
+
     # STEP 1: FETCH DATA
     # Modes:
     #     - Mode 'positions': All markets a user currently has positions in
