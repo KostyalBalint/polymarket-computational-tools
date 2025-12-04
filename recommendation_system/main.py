@@ -90,9 +90,9 @@ def get_top_rows(table_name, limit=5):
     except psycopg.errors.UndefinedTable:
         print(f"Table '{table_name}' does not exist.")
 
-def export_to_csv(apriori: Apriori, file_name: str = None):
+def export_to_csv(apriori: Apriori, csv_filename: str = "association_rules.csv"):
     rules_df = apriori.export_rules_to_dataframe()
-    csv_filename = file_name if file_name else f'data/association_cache/association_rules_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+    
     rules_df.to_csv(csv_filename, index=False)
 
 def load_rules_from_csv(filepath="association_rules.csv"):
@@ -109,6 +109,7 @@ def load_rules_from_csv(filepath="association_rules.csv"):
                 "support": float(row["support"]),
                 "confidence": float(row["confidence"]),
                 "lift": float(row["lift"]),
+                "conviction": float(row["conviction"])
             })
     return rules
 
@@ -218,6 +219,7 @@ def get_user_transactions_by_username(
     mode: str = "trades",
     min_items: int = 2,
     days_back: int = 60,
+    test: bool = False
 ) -> Tuple[str | None, List[Set[str]]]:
     with conn.cursor() as cur:
         cur.execute(
@@ -233,14 +235,11 @@ def get_user_transactions_by_username(
         row = cur.fetchone()
 
     if not row:
-        print(f"No user found with name/pseudonym = {username}")
         return None, []
 
     proxy_wallet = row[0]
-    print(f"Found proxyWallet for '{username}': {proxy_wallet}")
-
     cursor = conn.cursor()
-    print("FETCHING TRANSACTION DATA FOR SINGLE USER")
+
 
     if mode == "positions":
         query = """
@@ -301,7 +300,8 @@ def get_user_transactions_by_username(
     results = cursor.fetchall()
     cursor.close()
 
-    print(f"Raw rows fetched for user: {len(results)}")
+    if test:
+        print(f"Raw rows fetched for user: {len(results)}")
 
     transaction_dict = defaultdict(set)
     for transaction_id, item in results:
@@ -313,12 +313,13 @@ def get_user_transactions_by_username(
         if len(items) >= min_items
     ]
 
-    print(f"User '{username}' transaction statistics:")
-    print(f"\tTotal transactions (after min_items={min_items}): {len(transactions)}")
-    if transactions:
-        avg_items = sum(len(t) for t in transactions) / len(transactions)
-        print(f"\tAverage items per transaction: {avg_items:.2f}")
-        print(f"\tTotal unique items: {len(set().union(*transactions))}")
+    if test:
+        print(f"User '{username}' transaction statistics:")
+        print(f"\tTotal transactions (after min_items={min_items}): {len(transactions)}")
+        if transactions:
+            avg_items = sum(len(t) for t in transactions) / len(transactions)
+            print(f"\tAverage items per transaction: {avg_items:.2f}")
+            print(f"\tTotal unique items: {len(set().union(*transactions))}")
 
     return proxy_wallet, transactions
 
@@ -374,7 +375,8 @@ def get_recommendations_for_user(username: str, force_renew_rules: bool = False,
         days_back=params['days_back']
     )
     if transactions is None:
-        print(f"No transactions found for user name {username}")
+        if test:
+            print(f"No transactions found for user name {username}")
     else:
         user_markets = list({item for group in transactions for item in group})
         recommendations = apriori.get_recommendations(
@@ -513,8 +515,6 @@ if __name__ == "__main__":
 
     parser.print_help()
 
-
-
 #Load association rules from most recent CSV cache
 import glob
 import pandas as pd
@@ -530,7 +530,7 @@ def load_cached_rules():
         return cached_rules_df
 
     # Find most recent rules file
-    cache_pattern = "data/association_cache/association_rules_*.csv"
+    cache_pattern = "association_rules.csv"
     cache_files = glob.glob(cache_pattern)
 
     if not cache_files:
@@ -554,13 +554,6 @@ def load_cached_rules():
     return cached_rules_df
 
 def build_and_cache_association_rules(force_rebuild=False):
-    """
-    Build association rules from all user transactions and cache them.
-    Call this before using get_recommendations_for_user_fast()
-    
-    Args:
-        force_rebuild: If True, rebuild even if cache exists
-    """
     global cached_rules_df
     
     # Check if cache already exists
@@ -573,7 +566,6 @@ def build_and_cache_association_rules(force_rebuild=False):
     
     print("Building association rules from scratch...")
     
-    # Connect to database
     conn = psycopg.connect(get_connection_string())
     params = get_apriori_params()
     
@@ -623,12 +615,10 @@ def build_and_cache_association_rules(force_rebuild=False):
     print("Caching rules to CSV...")
     export_to_csv(apriori)
     
-    # Print summary
     apriori.print_summary()
     
     conn.close()
     
-    # Load the newly created cache
     cached_rules_df = load_cached_rules()
     return cached_rules_df
 
@@ -636,11 +626,11 @@ def build_and_cache_association_rules(force_rebuild=False):
 def get_recommendations_for_user_fast(address: str, top_n: int = 10):
     global cached_rules_df
 
-    # Load cached rules if not already loaded
+    # Load cached rules 
     if cached_rules_df is None:
         cached_rules_df = load_cached_rules()
     
-    # If still None, try to build the cache
+
     if cached_rules_df is None:
         print("No cached rules found. Building association rules...")
         cached_rules_df = build_and_cache_association_rules()
@@ -649,7 +639,7 @@ def get_recommendations_for_user_fast(address: str, top_n: int = 10):
             print("ERROR: Failed to build association rules")
             return []
 
-    # Get user's markets from DB (this is fast - single user query)
+    # Get user markets from DB 
     conn = psycopg.connect(get_connection_string())
     params = get_apriori_params()
 
@@ -665,7 +655,7 @@ def get_recommendations_for_user_fast(address: str, top_n: int = 10):
     if not transactions:
         return []
 
-    # Flatten user's markets
+    # Flatten user markets
     user_markets = set()
     for t in transactions:
         user_markets.update(t)
@@ -673,7 +663,7 @@ def get_recommendations_for_user_fast(address: str, top_n: int = 10):
     recommendations = []
     seen_consequents = set()
 
-    # Sort by lift (highest first)
+    # Sort by lift
     sorted_rules = cached_rules_df.sort_values('lift', ascending=False)
 
     for _, rule in sorted_rules.iterrows():

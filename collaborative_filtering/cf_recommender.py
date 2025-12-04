@@ -3,7 +3,7 @@ import pandas as pd
 from collections import defaultdict
 from implicit.als import AlternatingLeastSquares
 import pickle
-
+import scipy.sparse as sparse
 from collaborative_filtering.utils import load_trade_tags
 from collaborative_filtering.utils import load_events_with_tags
 
@@ -17,32 +17,98 @@ tag_labels = {}
 loaded = False
 
 
-def load_cf_model(model_path="models/collaborative_filtering_model.npz",
-                  mappings_path="models/cf_mappings.pkl",):
-    global model, user_to_id, tag_to_id, event_tags, event_titles, tag_labels, loaded
+def load_cf_model(train_df: pd.DataFrame,
+                  factors=64,
+                  regularization=1.0, 
+                  iterations=50,      
+                  alpha=40,           
+                  force_reload=False, 
+                  model_path="models/collaborative_filtering_model.npz",
+                  mappings_path="models/cf_mappings.pkl"):
+    """
+    Loads or trains the Collaborative Filtering (ALS) model.
+    Supports force_reload to update hyperparameters on the fly.
+    """
+    global model, user_to_id, tag_to_id, event_tags, event_titles, tag_labels, loaded, matrix
 
-    if loaded:
-        return
+    # Only return existing model if we are NOT forcing a reload
+    if loaded and matrix is not None and not force_reload:
+        density = matrix.nnz / (matrix.shape[0] * matrix.shape[1])
+        sparsity = 1 - density
+        print(f"CF Model already loaded with Factors={model.factors}, Reg={model.regularization}, Iterations={model.iterations}")
+        print(f"Sparsity: {sparsity:.4f} ({sparsity*100:.2f}%)")
+        return model
 
-    print("Loading CF model...")
+    if force_reload:
+        print("Forcing model reload and retraining with new parameters.")
 
-    model = AlternatingLeastSquares(factors=64)
-    model = model.load(model_path)
+    print(f"Loading/Training CF model with: Factors={factors}, Reg={regularization}, Iterations={iterations}...")
 
-    with open(mappings_path, 'rb') as f:
-            mappings = pickle.load(f)
-            user_to_id = mappings['user_to_id']
-            tag_to_id = mappings['tag_to_id']
-            # Convert back to defaultdict
-            event_tags = defaultdict(list, mappings['event_tags'])
-            event_titles = mappings['event_titles']
-            tag_labels = mappings['tag_labels']
+    train_agg = train_df.groupby(['user_id', 'tag_id', 'tag_label'])['trade_count'].sum().reset_index()
+    print(f"  {len(train_agg):,} user-tag pairs")
+    
+    # build indexes
+    users_cat = train_agg['user_id'].astype('category')
+    tags_cat = train_agg['tag_id'].astype('category')
+    
+    user_to_id = {u: i for i, u in enumerate(users_cat.cat.categories)}
+    tag_to_id = {t: i for i, t in enumerate(tags_cat.cat.categories)}
+    
+    n_users = len(user_to_id)
+    n_tags = len(tag_to_id)
+    print(f"  matrix: {n_users} x {n_tags}")
+    
+    # build sparse matrix (Confidence matrix C = 1 + alpha * R)
+    row_id = users_cat.cat.codes.values
+    col_id = tags_cat.cat.codes.values
+    
+    # Using confidence weighting for implicit feedback
+    confidence = 1 + alpha * np.log1p(train_agg['trade_count'].values)
+    
+    matrix = sparse.csr_matrix((confidence, (row_id, col_id)), shape=(n_users, n_tags))
+    
+    # train model
+    model = AlternatingLeastSquares(
+        factors=factors,
+        regularization=regularization,
+        iterations=iterations,
+        random_state=42
+    )
+    
+    model.fit(matrix, show_progress=True)
+    
+    
+    if event_tags and event_titles:
+        print("Skipping event mapping (already loaded).")
+    else:
+        # build event-tag mappings only if empty
+        print("Mapping events...")
+        event_tags.clear() # ensure clean start if partially filled
+        train_event_ids = set(train_df['event_id'].unique())
 
-    print(f"  {len(user_to_id)} users, {len(tag_to_id)} tags")
+        events_df = load_events_with_tags()
+        for _, row in events_df .iterrows():
+            event_id = row['event_id']
+
+            if event_id not in train_event_ids:  # skip if not in train
+                continue
+
+            tag_id = row['tag_id']
+            
+            if tag_id in tag_to_id:
+                t_id = tag_to_id[tag_id]
+                event_tags[event_id].append(t_id)
+                tag_labels[t_id] = row['tag_label']
+            
+            event_titles[event_id] = row['title']
+    
     print(f"  {len(event_tags)} events mapped")
+    density = matrix.nnz / (matrix.shape[0] * matrix.shape[1])
+    sparsity = 1 - density
+    print(f"sparsity: {sparsity:.4f} ({sparsity*100:.2f}%)")
 
     loaded = True
-    print("done")
+    return model
 
 
 def get_event_scores(user_id):

@@ -42,7 +42,10 @@ def save_to_cache(df, cache_dir, prefix):
     print("done")
 
 
-async def load_events_df(conn, cache_dir=events_cache_dir):
+async def load_events_df(conn, train_trades, cache_dir=events_cache_dir):
+    events_df = None
+    
+    # loading from cache
     if os.path.isdir(cache_dir):
         df = load_from_cache(cache_dir, "events_part_*.parquet")
         if df is not None:
@@ -51,48 +54,41 @@ async def load_events_df(conn, cache_dir=events_cache_dir):
                 df = df.drop_duplicates(subset="id", keep="first")
                 df = df.set_index("id")
             df = df[~df.index.duplicated(keep="first")]
-            return df
-
-    print("No cache, querying database...")
-
-    # events from Event table
-    event_rows = await conn.fetch('SELECT id, title, description, "endDate" FROM "Event";')
-    events_df = pd.DataFrame([dict(r) for r in event_rows])
-    events_df.set_index("id", inplace=True)
-
-    # events from user_event_associations
-    user_events = await conn.fetch(
-        'SELECT event_id, event_title, event_description FROM user_event_associations;'
-    )
-    user_events_df = pd.DataFrame([dict(r) for r in user_events])
-
-    events_from_users = (
-        user_events_df[["event_id", "event_title", "event_description"]]
-        .drop_duplicates()
-        .rename(columns={
-            "event_id": "id",
-            "event_title": "title",
-            "event_description": "description",
-        })
-    )
-    events_from_users["id"] = events_from_users["id"].astype("int64")
-    events_from_users = events_from_users.set_index("id")
-
-    # combine, prefer Event table
-    combined = pd.concat([events_df, events_from_users])
-    combined = combined[~combined.index.duplicated(keep="first")]
-    combined.index = combined.index.astype("int64")
-    combined.index.name = "id"
-
-    # cache
-    to_save = combined.reset_index()
-    to_save["id"] = to_save["id"].astype("string")
-    save_to_cache(to_save, cache_dir, "events_part")
-
-    combined = to_save.set_index("id")
-    combined.index = combined.index.astype("int64")
-    combined = combined[~combined.index.duplicated(keep="first")]
-    return combined
+            events_df = df
+            print(f"Loaded {len(events_df)} events from cache")
+    
+    # query DB
+    else:
+        print("No cache, querying database...")
+        event_rows = await conn.fetch('SELECT id, title, description FROM "Event";')
+        events_df = pd.DataFrame([dict(r) for r in event_rows])
+        events_df.set_index('id', inplace=True)
+        print(f'Loaded {len(events_df)} events from DB')
+        
+        # create combined text
+        events_df['combined_text'] = events_df['title'].fillna('') + " " + events_df['description'].fillna('')
+        
+        to_save = events_df.reset_index()
+        to_save["id"] = to_save["id"].astype("string")
+        save_to_cache(to_save, cache_dir, "events_part")
+        
+        events_df = to_save.set_index("id")
+        events_df.index = events_df.index.astype("int64")
+        events_df = events_df[~events_df.index.duplicated(keep="first")]
+    
+    # filter to train events if provided
+    if train_trades is not None:
+        # ensure consistent types
+        train_event_ids = set(train_trades['event_id'].dropna().astype(int))
+        events_df = events_df[events_df.index.isin(train_event_ids)]
+        print(f'Filtered to {len(events_df)} events from train set')
+        
+        if len(events_df) == 0:
+            raise ValueError(f"No events found matching train_trades. "
+                           f"Check event_id types: index={events_df.index.dtype}, "
+                           f"train={train_trades['event_id'].dtype}")
+    
+    return events_df
 
 
 async def load_user_event_associations(conn, cache_dir=user_events_cache_dir):

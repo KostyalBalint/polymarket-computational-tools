@@ -208,7 +208,7 @@ class Apriori:
     #     - test: Print detailed progress information
     # Returns:
     #     - Dictionary {k: {item_set: support}} for all frequent k-item_sets
-    def generate_frequent_item_sets(self, min_support: float = 0.02, test: bool = True):
+    def generate_frequent_item_sets(self, min_support: float = 0.02, test: bool = False):
         if not self.transactions:
             raise ValueError("No transactions loaded")
 
@@ -284,7 +284,7 @@ class Apriori:
     # Returns:
     #     - List of association rules with metrics
 
-    def generate_association_rules(self, min_confidence: float = 0.3, min_lift: float = 1.0, test: bool = True):
+    def generate_association_rules(self, min_confidence: float = 0.3, min_lift: float = 1.0, test: bool = False):
         if not self.frequent_item_sets:
             raise ValueError("No frequent item sets.")
 
