@@ -10,6 +10,9 @@ class Apriori:
         self.frequent_item_sets = {}
         self.association_rules = []
 
+    def load_rules(self, rules):
+        self.association_rules = rules
+
     # STEP 1: FETCH DATA
     # Modes:
     #     - Mode 'positions': All markets a user currently has positions in
@@ -25,7 +28,8 @@ class Apriori:
     #   - List of transactions
     def fetch_user_transactions(self, mode: str = 'positions', min_items: int = 2, days_back: int = 30, test: bool = False):
         cursor = self.conn.cursor()
-        print("STEP 1: FETCHING TRANSACTION DATA")
+        if test:
+            print("STEP 1: FETCHING TRANSACTION DATA")
 
         if mode == 'positions':
             query = """
@@ -92,12 +96,14 @@ class Apriori:
             if len(items) >= min_items
         ]
 
-        print(f"\nTRANSACTION STATISTICS:")
-        print(f"\tTotal transactions: {len(self.transactions)}")
+        if test:
+            print(f"\nTRANSACTION STATISTICS:")
+            print(f"\tTotal transactions: {len(self.transactions)}")
         if self.transactions:
             avg_items = sum(len(t) for t in self.transactions) / len(self.transactions)
-            print(f"\tAverage items per transaction: {avg_items:.2f}")
-            print(f"\tTotal unique items: {len(set().union(*self.transactions))}")
+            if test:
+                print(f"\tAverage items per transaction: {avg_items:.2f}")
+                print(f"\tTotal unique items: {len(set().union(*self.transactions))}")
 
         if test:
             for t in self.transactions:
@@ -119,7 +125,8 @@ class Apriori:
     # Returns:
     #   - Dictionary {item_set: support} for frequent 1-item_sets
     def _get_frequent_1_item_sets(self, min_support: float, test: bool = False) -> Dict[frozenset, float]:
-        print(f"\nMinimum support threshold: {min_support} ({min_support * 100}%)")
+        if test:
+            print(f"\nMinimum support threshold: {min_support} ({min_support * 100}%)")
 
         # Count each individual item
         item_counts = defaultdict(int)
@@ -201,14 +208,15 @@ class Apriori:
     #     - test: Print detailed progress information
     # Returns:
     #     - Dictionary {k: {item_set: support}} for all frequent k-item_sets
-    def generate_frequent_item_sets(self, min_support: float = 0.02, test: bool = True):
+    def generate_frequent_item_sets(self, min_support: float = 0.02, test: bool = False):
         if not self.transactions:
             raise ValueError("No transactions loaded")
 
         self.frequent_item_sets = {1: self._get_frequent_1_item_sets(min_support, test)}
 
         if not self.frequent_item_sets[1]:
-            print("\nNo frequent 1-itemsets found. Try lowering min_support.")
+            if test:
+                print("\nNo frequent 1-itemsets found. Try lowering min_support.")
             return self.frequent_item_sets
 
         k = 2
@@ -243,9 +251,10 @@ class Apriori:
 
                     # Show examples
                     sorted_item_sets = sorted(frequent_k.items(), key=lambda x: x[1], reverse=True)
-                    print(f"\n\t📊 TOP 5 FREQUENT {k}-ITEM_SETS:")
-                    for i, (item_set, sup) in enumerate(sorted_item_sets[:5], 1):
-                        print(f"      {i}. {list(item_set)}: {sup:.3f} ({sup * 100:.1f}%)")
+                    if test:
+                        print(f"\n\tTOP 5 FREQUENT {k}-ITEM_SETS:")
+                        for i, (item_set, sup) in enumerate(sorted_item_sets[:5], 1):
+                            print(f"      {i}. {list(item_set)}: {sup:.3f} ({sup * 100:.1f}%)")
                 k += 1
             else:
                 if test:
@@ -275,13 +284,14 @@ class Apriori:
     # Returns:
     #     - List of association rules with metrics
 
-    def generate_association_rules(self, min_confidence: float = 0.3, min_lift: float = 1.0, test: bool = True):
+    def generate_association_rules(self, min_confidence: float = 0.3, min_lift: float = 1.0, test: bool = False):
         if not self.frequent_item_sets:
             raise ValueError("No frequent item sets.")
 
-        print("STEP 6: GENERATING ASSOCIATION RULES")
-        print(f"\nMinimum confidence: {min_confidence} ({min_confidence * 100}%)")
-        print(f"Minimum lift: {min_lift}")
+        if test:
+            print("STEP 6: GENERATING ASSOCIATION RULES")
+            print(f"\nMinimum confidence: {min_confidence} ({min_confidence * 100}%)")
+            print(f"Minimum lift: {min_lift}")
 
         self.association_rules = []
         rules_tested = 0
@@ -351,8 +361,9 @@ class Apriori:
     # Returns:
     #     - List of recommendations with metrics
     def get_recommendations(self, user_markets: List[str], top_n: int = 5, test: bool = True) -> List[Dict]:
-        print("STEP 7: GENERATING RECOMMENDATIONS")
-        print(f"\nUser's current markets: {user_markets}")
+        if test:
+            print("STEP 7: GENERATING RECOMMENDATIONS")
+            print(f"\nUser's current markets: {user_markets}")
 
         recommendations = []
         previous_consequents = set()

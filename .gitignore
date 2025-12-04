@@ -106,4 +106,8 @@ dist
 .idea
 .DS_Store
 *.pyc
-topic_based_recommender/train_user_events.csv
+
+.env
+collaborative_filtering/.env
+data/association_cache/*
+
